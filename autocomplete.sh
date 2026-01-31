@@ -115,11 +115,11 @@ _completion_vars() {
 ###############################################################################
 
 _get_system_message_prompt() {
-    echo "You are a helpful bash_completion script. Generate relevant and concise auto-complete suggestions for the given user command in the context of the current directory, operating system, command history, and environment variables. The output must be a list of two to five possible completions or rewritten commands, each on a new line, without spanning multiple lines. Each must be a valid command or chain of commands. Do not include backticks or quotes."
+    echo "You are a helpful bash_completion script. Generate relevant and concise auto-complete suggestions for the given user command in the context of the current directory, operating system, command history, and environment variables. For each suggestion, provide both the command and a brief one-line explanation of what it does. The output must be a list of two to five possible completions or rewritten commands. Each must be a valid command or chain of commands. Do not include backticks or quotes in the commands."
 }
 
 _get_output_instructions() {
-    echo "Provide a list of suggested completions or commands that could be run in the terminal. YOU MUST provide a list of two to five possible completions or rewritten commands. DO NOT wrap the commands in backticks or quotes. Each must be a valid command or chain of commands. Focus on the user's intent, recent commands, and the current environment. RETURN A JSON OBJECT WITH THE COMPLETIONS."
+    echo "Provide a list of suggested completions or commands that could be run in the terminal. YOU MUST provide a list of two to five possible completions or rewritten commands. For each command, include a brief one-line explanation (max 60 characters) of what it does. DO NOT wrap the commands in backticks or quotes. Each must be a valid command or chain of commands. Focus on the user's intent, recent commands, and the current environment. RETURN A JSON OBJECT WITH THE COMPLETIONS AND THEIR EXPLANATIONS."
 }
 
 _get_command_history() {
@@ -250,13 +250,23 @@ $prompt"
                 tool_choice: {type: "tool", name: "bash_completions"},
                 tools: [{
                     name: "bash_completions",
-                    description: "syntactically correct command-line suggestions",
+                    description: "syntactically correct command-line suggestions with explanations",
                     input_schema: {
                         type: "object",
                         properties: {
-                            commands: {type: "array", items: {type: "string", description: "A suggested command"}}
+                            suggestions: {
+                                type: "array",
+                                items: {
+                                    type: "object",
+                                    properties: {
+                                        command: {type: "string", description: "The suggested command"},
+                                        explanation: {type: "string", description: "Brief explanation of what the command does"}
+                                    },
+                                    required: ["command", "explanation"]
+                                }
+                            }
                         },
-                        required: ["commands"]
+                        required: ["suggestions"]
                     }
                 }]
             }')
@@ -278,13 +288,23 @@ $prompt"
                     type: "function",
                     function: {
                         name: "bash_completions",
-                        description: "syntactically correct command-line suggestions",
+                        description: "syntactically correct command-line suggestions with explanations",
                         parameters: {
                             type: "object",
                             properties: {
-                                commands: {type: "array", items: {type: "string", description: "A suggested command"}}
+                                suggestions: {
+                                    type: "array",
+                                    items: {
+                                        type: "object",
+                                        properties: {
+                                            command: {type: "string", description: "The suggested command"},
+                                            explanation: {type: "string", description: "Brief explanation of what the command does"}
+                                        },
+                                        required: ["command", "explanation"]
+                                    }
+                                }
                             },
-                            required: ["commands"]
+                            required: ["suggestions"]
                         }
                     }
                 },
@@ -292,13 +312,23 @@ $prompt"
                     type: "function",
                     function: {
                         name: "bash_completions",
-                        description: "syntactically correct command-line suggestions",
+                        description: "syntactically correct command-line suggestions with explanations",
                         parameters: {
                             type: "object",
                             properties: {
-                                commands: {type: "array", items: {type: "string", description: "A suggested command"}}
+                                suggestions: {
+                                    type: "array",
+                                    items: {
+                                        type: "object",
+                                        properties: {
+                                            command: {type: "string", description: "The suggested command"},
+                                            explanation: {type: "string", description: "Brief explanation of what the command does"}
+                                        },
+                                        required: ["command", "explanation"]
+                                    }
+                                }
                             },
-                            required: ["commands"]
+                            required: ["suggestions"]
                         }
                     }
                 }]
@@ -388,20 +418,27 @@ openai_completion() {
     fi
 
     if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
-        content=$(echo "$response_body" | jq -r '.content[0].input.commands')
+        content=$(echo "$response_body" | jq -r '.content[0].input.suggestions')
     elif [[ "${ACSH_PROVIDER^^}" == "GROQ" ]]; then
         content=$(echo "$response_body" | jq -r '.choices[0].message.content')
-        content=$(echo "$content" | jq -r '.completions')
+        content=$(echo "$content" | jq -r '.suggestions // .completions')
     elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
         content=$(echo "$response_body" | jq -r '.message.content')
-        content=$(echo "$content" | jq -r '.completions')
+        content=$(echo "$content" | jq -r '.suggestions // .completions')
     else
         content=$(echo "$response_body" | jq -r '.choices[0].message.tool_calls[0].function.arguments')
-        content=$(echo "$content" | jq -r '.commands')
+        content=$(echo "$content" | jq -r '.suggestions // .commands')
     fi
 
     local completions
-    completions=$(echo "$content" | jq -r '.[]' | grep -v '^$')
+    # Format: "command|||explanation" for each line
+    if echo "$content" | jq -e 'type == "array"' &>/dev/null; then
+        # New format with suggestions array
+        completions=$(echo "$content" | jq -r '.[] | .command + "|||" + .explanation' | grep -v '^$')
+    else
+        # Fallback for old format (just commands)
+        completions=$(echo "$content" | jq -r '.[]' | grep -v '^$' | sed 's/$/|||/')
+    fi
     echo -n "$completions"
     log_request "$user_input" "$response_body"
 }
@@ -501,11 +538,14 @@ _autocompletesh() {
             local num_rows
             num_rows=$(echo "$completions" | wc -l)
             COMPREPLY=()
+            # Extract just the command part (before |||) for display
+            local cmd_only
+            cmd_only=$(echo "$completions" | sed 's/|||.*//')
             if [[ $num_rows -eq 1 ]]; then
-                readarray -t COMPREPLY <<<"$(echo -n "${completions}" | sed "s/${command}[[:space:]]*//" | sed 's/:/\\:/g')"
+                readarray -t COMPREPLY <<<"$(echo -n "${cmd_only}" | sed "s/${command}[[:space:]]*//" | sed 's/:/\\:/g')"
             else
-                completions=$(echo "$completions" | awk '{print NR". "$0}')
-                readarray -t COMPREPLY <<< "$completions"
+                cmd_only=$(echo "$cmd_only" | awk '{print NR". "$0}')
+                readarray -t COMPREPLY <<< "$cmd_only"
             fi
         fi
         if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
@@ -516,7 +556,7 @@ _autocompletesh() {
 
 # Interactive autocomplete function that can be bound to a key
 _interactive_autocomplete_widget() {
-    local user_input completions
+    local user_input completions show_explanations
 
     # Get current line content
     user_input="${READLINE_LINE}"
@@ -524,6 +564,15 @@ _interactive_autocomplete_widget() {
     # If line is empty, return
     if [[ -z "$user_input" ]]; then
         return
+    fi
+
+    # Check if user wants explanations
+    show_explanations=false
+    if [[ "$user_input" == *"--explain"* ]]; then
+        show_explanations=true
+        # Remove the "--explain" flag from the input before sending to API
+        user_input="${user_input%%--explain*}"
+        user_input="${user_input%% }"  # Trim trailing space
     fi
 
     # Load config
@@ -568,7 +617,7 @@ _interactive_autocomplete_widget() {
 
     # Show interactive menu and execute selected command
     if [[ -n "$completions" ]]; then
-        _interactive_completion_menu "$completions"
+        _interactive_completion_menu "$completions" "$show_explanations"
 
         # Clear the readline buffer after execution
         READLINE_LINE=""
@@ -590,6 +639,7 @@ show_help() {
     echo -e "\e[1;32mUsage:\e[0m"
     echo "  - Press Tab twice for suggestions (standard completion)"
     echo "  - Press Ctrl+Space for interactive menu (navigate with ↑/↓, Enter to execute)"
+    echo "  - Add '--explain' to your command to show explanations in the interactive menu"
     echo
     echo "Commands:"
     echo "  command             Run autocomplete (simulate double Tab)"
@@ -935,7 +985,7 @@ enable_command() {
     bind -x '"\C-@": _interactive_autocomplete_widget'
 
     echo_green "Interactive autocomplete enabled!"
-    echo -e "\e[90mPress Ctrl+Space for interactive command suggestions!\e[0m"
+    echo -e "\e[90mPress Ctrl+Space for interactive suggestions (add '--explain' for explanations)\e[0m"
 }
 
 disable_command() {
@@ -1033,11 +1083,25 @@ get_key() {
 
 _interactive_completion_menu() {
     local completions_str="$1"
+    local show_explanations="${2:-false}"
     local options=()
+    local explanations=()
 
-    # Parse completions into array
+    # Parse completions into arrays (format: "command|||explanation")
     while IFS= read -r line; do
-        [[ -n "$line" ]] && options+=("$line")
+        if [[ -n "$line" ]]; then
+            # Check if separator exists
+            if [[ "$line" == *"|||"* ]]; then
+                local cmd="${line%%|||*}"
+                local exp="${line#*|||}"
+                options+=("$cmd")
+                explanations+=("$exp")
+            else
+                # Old format without explanation
+                options+=("$line")
+                explanations+=("")
+            fi
+        fi
     done <<< "$completions_str"
 
     # If no options, return
@@ -1061,15 +1125,35 @@ _interactive_completion_menu() {
         for i in "${!options[@]}"; do
             if [[ $i -eq $selected ]]; then
                 echo -e "  \e[1;32m▶ \e[1;97m${options[i]}\e[0m"
+                if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
+                    echo -e "    \e[2;37m${explanations[i]}\e[0m"
+                fi
             else
                 echo -e "    \e[90m${options[i]}\e[0m"
+                if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
+                    echo -e "    \e[2;90m${explanations[i]}\e[0m"
+                fi
+            fi
+            # Add blank line between options (except after the last one, and only if showing explanations)
+            if [[ "$show_explanations" == "true" && $i -lt $((${#options[@]} - 1)) ]]; then
+                echo
             fi
         done
     }
 
     clear_menu() {
-        # Move cursor up by the number of menu lines and clear each line
-        local num_lines=${#options[@]}
+        # Move cursor up by the number of menu lines
+        local num_lines=0
+        for i in "${!options[@]}"; do
+            ((num_lines++))  # Command line
+            if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
+                ((num_lines++))  # Explanation line
+            fi
+            # Blank line between options (except after the last one, and only if showing explanations)
+            if [[ "$show_explanations" == "true" && $i -lt $((${#options[@]} - 1)) ]]; then
+                ((num_lines++))
+            fi
+        done
         for ((i=0; i<num_lines; i++)); do
             tput cuu1   # Move cursor up one line
             printf '\r' # Move to beginning of line
