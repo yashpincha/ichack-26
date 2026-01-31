@@ -973,6 +973,37 @@ model
     fi
 }
 
+_enable_safeguards() {
+    # Save original rm command if not already saved
+    if ! type -t _original_rm &>/dev/null; then
+        eval "$(echo "_original_rm() { $(type -p rm) \"\$@\"; }")"
+    fi
+
+    # Create safeguard wrapper for rm
+    rm() {
+        local cmd_string="rm $*"
+        echo -e "\e[1;33m⚠ WARNING: 'rm' is irreversible and will permanently delete files.\e[0m"
+        echo -e "\e[1;32m▶ Command:\e[0m $cmd_string"
+        echo
+        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            _original_rm "$@"
+        else
+            echo -e "\e[90mCommand cancelled.\e[0m"
+            return 1
+        fi
+    }
+    export -f rm
+}
+
+_disable_safeguards() {
+    # Restore original rm if it exists
+    if type -t _original_rm &>/dev/null; then
+        unset -f rm
+    fi
+}
+
 enable_command() {
     if check_if_enabled; then
         echo_green "Reloading Autocomplete.sh..."
@@ -984,14 +1015,19 @@ enable_command() {
     # Bind Ctrl+Space to interactive autocomplete widget
     bind -x '"\C-@": _interactive_autocomplete_widget'
 
+    # Enable safeguard for risky commands
+    _enable_safeguards
+
     echo_green "Interactive autocomplete enabled!"
     echo -e "\e[90mPress Ctrl+Space for interactive suggestions (add '--explain' for explanations)\e[0m"
+    echo -e "\e[90mSafeguards enabled: risky commands will require confirmation\e[0m"
 }
 
 disable_command() {
     if check_if_enabled; then
         complete -F _completion_loader -D
     fi
+    _disable_safeguards
 }
 
 command_command() {
@@ -1200,6 +1236,20 @@ _interactive_completion_menu() {
                 # Enter key pressed - execute the command
                 clear_menu
                 local selected_cmd="${options[selected]}"
+
+                # Check if command is risky (starts with rm)
+                if [[ "$selected_cmd" =~ ^[[:space:]]*rm[[:space:]] ]]; then
+                    echo -e "\e[1;33m⚠ WARNING: This command uses 'rm' which is irreversible.\e[0m"
+                    echo -e "\e[1;32m▶ Command:\e[0m $selected_cmd"
+                    echo
+                    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+                    echo
+                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                        echo -e "\e[90mCommand cancelled.\e[0m"
+                        return 1
+                    fi
+                fi
+
                 echo -e "\e[1;32m▶ Executing:\e[0m $selected_cmd"
                 echo
 
