@@ -17,6 +17,7 @@ st.set_page_config(
 )
 
 import sys
+import time
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from viz.components import (
@@ -27,8 +28,17 @@ from viz.components import (
     create_match_viewer,
     create_strategy_radar,
     create_lineage_tree,
+    create_live_leaderboard,
+    create_live_match_card,
+    create_cooperation_gauge,
+    create_thinking_display,
+    create_round_display,
+    create_personality_radar_multi,
+    create_trait_evolution_chart,
+    create_evolution_summary_card,
 )
-from src.config import LOGS_DIR, COOPERATE_COLOR, DEFECT_COLOR
+from src.config import LOGS_DIR, COOPERATE_COLOR, DEFECT_COLOR, PERSONALITY_TRAITS
+from src.live_state import read_live_state, LiveState
 
 
 # Custom CSS for dark theme
@@ -96,10 +106,63 @@ def main():
     
     # Load data
     all_generation_data = load_generation_data()
+    live_state = read_live_state()
     
-    if not all_generation_data:
+    # Sidebar
+    with st.sidebar:
+        st.header("🎛️ Controls")
+        
+        # View mode - include Live option
+        view_mode = st.radio(
+            "View Mode",
+            ["🔴 Live", "📊 Overview", "🧬 Evolution", "🤖 Agents", "🎮 Matches", "🌳 Lineage"],
+            key="view_mode",
+        )
+        
+        st.divider()
+        
+        # Show generation selector only for non-live modes
+        if view_mode != "🔴 Live":
+            if all_generation_data:
+                max_gen = max(d["generation"] for d in all_generation_data)
+                selected_gen = st.slider(
+                    "Select Generation",
+                    min_value=0,
+                    max_value=max_gen,
+                    value=max_gen,
+                    key="gen_slider",
+                )
+                
+                st.divider()
+                
+                # Quick stats
+                current_data = load_single_generation(selected_gen)
+                if current_data:
+                    stats = current_data.get("statistics", {})
+                    st.metric("Cooperation Rate", f"{stats.get('cooperation_rate', 0):.1%}")
+                    st.metric("Mutual Cooperation", f"{stats.get('mutual_cooperation_rate', 0):.1%}")
+                    st.metric("Avg Score/Round", f"{stats.get('avg_score_per_round', 0):.1f}")
+            else:
+                selected_gen = 0
+        else:
+            selected_gen = live_state.generation if live_state else 0
+            
+            # Live mode controls
+            if live_state:
+                st.metric("Status", live_state.status.upper())
+                st.metric("Generation", live_state.generation)
+                st.metric("Progress", f"{live_state.match_number}/{live_state.total_matches}")
+            
+            # Auto-refresh toggle
+            auto_refresh = st.checkbox("Auto-refresh (2s)", value=True, key="auto_refresh")
+            if auto_refresh:
+                time.sleep(0.1)  # Small delay to prevent tight loop
+                st.rerun()
+    
+    # Handle no data case for non-live modes
+    if not all_generation_data and view_mode != "🔴 Live":
         st.warning("No generation data found. Run the evolution first!")
-        st.code("python main.py evolve --generations 10", language="bash")
+        st.code("python main.py evolve --generations 10 --live", language="bash")
         
         # Show option to run evolution
         if st.button("🚀 Run Evolution (Demo Mode)"):
@@ -113,48 +176,107 @@ def main():
                     st.error(f"Error running evolution: {e}")
         return
     
-    # Sidebar
-    with st.sidebar:
-        st.header("🎛️ Controls")
-        
-        # Generation selector
-        max_gen = max(d["generation"] for d in all_generation_data)
-        selected_gen = st.slider(
-            "Select Generation",
-            min_value=0,
-            max_value=max_gen,
-            value=max_gen,
-            key="gen_slider",
-        )
-        
-        st.divider()
-        
-        # View mode
-        view_mode = st.radio(
-            "View Mode",
-            ["📊 Overview", "🤖 Agents", "🎮 Matches", "🌳 Lineage"],
-            key="view_mode",
-        )
-        
-        st.divider()
-        
-        # Quick stats
-        current_data = load_single_generation(selected_gen)
-        if current_data:
-            stats = current_data.get("statistics", {})
-            st.metric("Cooperation Rate", f"{stats.get('cooperation_rate', 0):.1%}")
-            st.metric("Mutual Cooperation", f"{stats.get('mutual_cooperation_rate', 0):.1%}")
-            st.metric("Avg Score/Round", f"{stats.get('avg_score_per_round', 0):.1f}")
-    
     # Main content based on view mode
-    if view_mode == "📊 Overview":
+    if view_mode == "🔴 Live":
+        show_live(live_state)
+    elif view_mode == "📊 Overview":
         show_overview(all_generation_data, selected_gen)
+    elif view_mode == "🧬 Evolution":
+        show_evolution(all_generation_data)
     elif view_mode == "🤖 Agents":
         show_agents(selected_gen)
     elif view_mode == "🎮 Matches":
         show_matches(selected_gen)
     elif view_mode == "🌳 Lineage":
         show_lineage(all_generation_data)
+
+
+def show_live(live_state: Optional[LiveState]):
+    """Show live tournament progress."""
+    st.header("🔴 Live Tournament")
+    
+    if not live_state:
+        st.info("No live tournament running. Start one with:")
+        st.code("python main.py evolve --generations 10 --live", language="bash")
+        return
+    
+    # Status indicator
+    status_colors = {
+        "idle": "gray",
+        "running": "green", 
+        "evolving": "yellow",
+        "complete": "blue",
+    }
+    status_color = status_colors.get(live_state.status, "gray")
+    
+    # Progress section
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Generation", live_state.generation)
+    with col2:
+        st.metric("Match", f"{live_state.match_number}/{live_state.total_matches}")
+    with col3:
+        st.metric("Status", live_state.status.upper())
+    with col4:
+        coop_rate = live_state.cooperation_rate * 100 if live_state.cooperation_rate else 0
+        st.metric("Cooperation", f"{coop_rate:.1f}%")
+    
+    # Progress bar
+    progress_pct = live_state.progress_percent / 100
+    st.progress(progress_pct, text=f"Tournament Progress: {live_state.progress_percent:.0f}%")
+    
+    # Two-column layout
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Leaderboard
+        st.subheader("📊 Live Leaderboard")
+        if live_state.leaderboard:
+            create_live_leaderboard(live_state.leaderboard)
+        else:
+            st.info("Waiting for matches to complete...")
+    
+    with col2:
+        # Recent matches
+        st.subheader("🎮 Recent Matches")
+        if live_state.recent_matches:
+            for match in live_state.recent_matches[:5]:
+                create_live_match_card(match)
+        else:
+            st.info("No matches completed yet...")
+    
+    # Live statistics
+    st.subheader("📈 Live Statistics")
+    col1, col2, col3 = st.columns(3)
+    
+    total_moves = live_state.total_cooperations + live_state.total_defections
+    total_rounds = live_state.mutual_cooperations + live_state.mutual_defections + (total_moves // 2 - live_state.mutual_cooperations - live_state.mutual_defections) if total_moves > 0 else 0
+    
+    with col1:
+        if total_moves > 0:
+            create_cooperation_gauge(live_state.cooperation_rate)
+        else:
+            st.metric("Overall Cooperation", "N/A")
+    
+    with col2:
+        if total_rounds > 0:
+            mutual_coop_rate = live_state.mutual_cooperations / (live_state.match_number * 10) if live_state.match_number > 0 else 0
+            st.metric("Mutual Cooperations", live_state.mutual_cooperations)
+            st.caption(f"Both players cooperated")
+        else:
+            st.metric("Mutual Cooperations", "0")
+    
+    with col3:
+        if total_rounds > 0:
+            mutual_def_rate = live_state.mutual_defections / (live_state.match_number * 10) if live_state.match_number > 0 else 0
+            st.metric("Mutual Defections", live_state.mutual_defections)
+            st.caption(f"Both players defected")
+        else:
+            st.metric("Mutual Defections", "0")
+    
+    # Last updated
+    st.caption(f"Last updated: {live_state.last_updated}")
 
 
 def show_overview(all_data: list[dict], selected_gen: int):
@@ -226,6 +348,112 @@ def show_overview(all_data: list[dict], selected_gen: int):
                 "Generations",
                 len(all_data),
             )
+
+
+def show_evolution(all_data: list[dict]):
+    """Show personality evolution analysis."""
+    st.header("🧬 Personality Evolution")
+    
+    if len(all_data) < 2:
+        st.info("Need at least 2 generations to show evolution analysis.")
+        return
+    
+    # Get first and last generation stats
+    first_gen = all_data[0]
+    last_gen = all_data[-1]
+    
+    first_stats = first_gen.get("gene_statistics", {})
+    last_stats = last_gen.get("gene_statistics", {})
+    
+    # Evolution Summary Card
+    if first_stats and last_stats:
+        create_evolution_summary_card(first_stats, last_stats)
+    
+    st.divider()
+    
+    # Trait selector for detailed view
+    st.subheader("📈 Trait Evolution Over Time")
+    
+    available_traits = list(first_stats.keys()) if first_stats else PERSONALITY_TRAITS
+    selected_trait = st.selectbox(
+        "Select trait to analyze",
+        available_traits,
+        format_func=lambda x: x.replace("_", " ").title()
+    )
+    
+    if selected_trait:
+        fig = create_trait_evolution_chart(all_data, selected_trait)
+        st.plotly_chart(fig, use_container_width=True)
+    
+    st.divider()
+    
+    # Compare first vs last generation personalities
+    st.subheader("🎭 Personality Comparison: Gen 0 vs Final")
+    
+    # Get agents from first and last generation
+    first_agents = first_gen.get("agents", [])[:4]
+    last_agents = last_gen.get("agents", [])[:4]
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Generation 0 (Random Start)**")
+        if first_agents:
+            fig = create_personality_radar_multi(first_agents, "Gen 0 Personalities")
+            st.plotly_chart(fig, use_container_width=True)
+    
+    with col2:
+        st.markdown(f"**Generation {last_gen.get('generation', 'Final')} (Evolved)**")
+        if last_agents:
+            fig = create_personality_radar_multi(last_agents, "Final Personalities")
+            st.plotly_chart(fig, use_container_width=True)
+    
+    st.divider()
+    
+    # Key findings
+    st.subheader("🔍 Key Findings")
+    
+    if first_stats and last_stats:
+        # Calculate biggest changes
+        changes = []
+        for trait in first_stats:
+            if trait in last_stats:
+                gen0_mean = first_stats[trait].get("mean", 0.5)
+                final_mean = last_stats[trait].get("mean", 0.5)
+                change = final_mean - gen0_mean
+                changes.append({
+                    "trait": trait,
+                    "gen0": gen0_mean,
+                    "final": final_mean,
+                    "change": change,
+                })
+        
+        changes.sort(key=lambda x: abs(x["change"]), reverse=True)
+        
+        if changes:
+            biggest = changes[0]
+            direction = "increased" if biggest["change"] > 0 else "decreased"
+            
+            st.markdown(f"""
+            **Biggest Change:** {biggest['trait'].replace('_', ' ').title()} {direction} 
+            from {biggest['gen0']:.0%} to {biggest['final']:.0%}
+            
+            **What this means:** Evolution selected for agents with {'higher' if biggest['change'] > 0 else 'lower'} 
+            {biggest['trait'].replace('_', ' ')}, suggesting this trait conferred a survival advantage.
+            """)
+            
+            # Interpret the evolved strategy
+            st.markdown("### 🎯 Evolved Strategy Profile")
+            
+            high_traits = [c["trait"] for c in changes if c["final"] > 0.6]
+            low_traits = [c["trait"] for c in changes if c["final"] < 0.4]
+            
+            if high_traits or low_traits:
+                st.markdown("The evolved population tends to have:")
+                if high_traits:
+                    st.markdown("- **High:** " + ", ".join(t.replace("_", " ").title() for t in high_traits))
+                if low_traits:
+                    st.markdown("- **Low:** " + ", ".join(t.replace("_", " ").title() for t in low_traits))
 
 
 def show_agents(selected_gen: int):

@@ -1,12 +1,14 @@
-"""Evolutionary algorithms: selection, crossover, and mutation."""
+"""Evolutionary algorithms for AI agent personalities."""
 
 from __future__ import annotations
 
 import random
 import uuid
+import statistics
 from typing import Optional
+from collections import Counter
 
-from src.agent import Agent, AgentDNA
+from src.agent import Agent, AgentPersonality
 from src.config import (
     MUTATION_RATE,
     MUTATION_SIGMA,
@@ -14,8 +16,7 @@ from src.config import (
     BLENDING_PROBABILITY,
     GENE_MIN,
     GENE_MAX,
-    STRATEGY_KEYWORD_POOL,
-    REASONING_DEPTH_OPTIONS,
+    PERSONALITY_TRAITS,
 )
 
 
@@ -54,94 +55,69 @@ def tournament_select(
 
 def crossover(parent1: Agent, parent2: Agent) -> Agent:
     """
-    Create a child agent by mixing parent genes.
+    Create a child agent by mixing parent personalities.
     
-    Uses uniform crossover with occasional gene blending for numeric values.
+    Uses uniform crossover with occasional trait blending.
     
     Args:
         parent1: First parent agent
         parent2: Second parent agent
     
     Returns:
-        New child agent
+        New child agent with mixed personality
     """
-    genes1 = parent1.dna.to_dict()
-    genes2 = parent2.dna.to_dict()
-    child_genes = {}
+    traits1 = parent1.personality.to_dict()
+    traits2 = parent2.personality.to_dict()
+    child_traits = {}
     
-    for gene in genes1:
+    for trait in PERSONALITY_TRAITS:
         # Randomly choose from either parent
         if random.random() < 0.5:
-            value = genes1[gene]
+            value = traits1[trait]
         else:
-            value = genes2[gene]
+            value = traits2[trait]
         
-        # Occasionally blend numeric genes
-        if isinstance(value, float) and random.random() < BLENDING_PROBABILITY:
-            avg = (genes1[gene] + genes2[gene]) / 2
+        # Occasionally blend traits (average with noise)
+        if random.random() < BLENDING_PROBABILITY:
+            avg = (traits1[trait] + traits2[trait]) / 2
             # Add small noise to blended value
             noise = random.gauss(0, 0.05)
             value = max(GENE_MIN, min(GENE_MAX, avg + noise))
         
-        # Handle list types (strategy_keywords)
-        if isinstance(value, list):
-            # Combine keywords from both parents, take a random subset
-            combined = list(set(genes1[gene] + genes2[gene]))
-            num_keywords = random.randint(1, min(4, len(combined)))
-            value = random.sample(combined, num_keywords)
-        
-        child_genes[gene] = value
+        child_traits[trait] = value
     
     return Agent(
         id=f"agent_{uuid.uuid4().hex[:8]}",
         generation=max(parent1.generation, parent2.generation) + 1,
-        dna=AgentDNA.from_dict(child_genes),
+        personality=AgentPersonality.from_dict(child_traits),
         parent_ids=[parent1.id, parent2.id],
     )
 
 
 def mutate(agent: Agent, rate: float = MUTATION_RATE) -> Agent:
     """
-    Randomly mutate agent genes.
+    Randomly mutate agent personality traits.
     
     Args:
         agent: Agent to mutate (modified in place)
-        rate: Probability of mutating each gene
+        rate: Probability of mutating each trait
     
     Returns:
         The mutated agent (same object)
     """
-    genes = agent.dna.to_dict()
+    traits = agent.personality.to_dict()
     
-    for gene, value in genes.items():
+    for trait in PERSONALITY_TRAITS:
         if random.random() >= rate:
             continue
         
-        if isinstance(value, float):
-            # Gaussian mutation, clamped to [0, 1]
-            new_val = value + random.gauss(0, MUTATION_SIGMA)
-            genes[gene] = max(GENE_MIN, min(GENE_MAX, new_val))
-        
-        elif isinstance(value, list):
-            # Mutate keyword list
-            if random.random() < 0.5 and len(value) > 1:
-                # Remove a random keyword
-                value = value.copy()
-                value.pop(random.randint(0, len(value) - 1))
-            else:
-                # Add a random keyword
-                value = value.copy()
-                new_keyword = random.choice(STRATEGY_KEYWORD_POOL)
-                if new_keyword not in value:
-                    value.append(new_keyword)
-            genes[gene] = value
-        
-        elif gene == "reasoning_depth":
-            # Mutate reasoning depth
-            genes[gene] = random.choice(REASONING_DEPTH_OPTIONS)
+        # Gaussian mutation, clamped to [0, 1]
+        old_val = traits[trait]
+        new_val = old_val + random.gauss(0, MUTATION_SIGMA)
+        traits[trait] = max(GENE_MIN, min(GENE_MAX, new_val))
     
-    # Update agent's DNA
-    agent.dna = AgentDNA.from_dict(genes)
+    # Update agent's personality
+    agent.personality = AgentPersonality.from_dict(traits)
     return agent
 
 
@@ -160,8 +136,11 @@ def reproduce(survivors: list[Agent], target_population: int) -> list[Agent]:
     offspring = []
     
     for _ in range(num_offspring):
-        # Select two parents (can be the same in small populations)
-        parent1, parent2 = random.sample(survivors, min(2, len(survivors)))
+        # Select two different parents if possible
+        if len(survivors) >= 2:
+            parent1, parent2 = random.sample(survivors, 2)
+        else:
+            parent1 = parent2 = survivors[0]
         
         # Create child through crossover
         child = crossover(parent1, parent2)
@@ -210,70 +189,106 @@ def evolve_generation(
     return new_population, survivors, offspring
 
 
-def calculate_gene_statistics(agents: list[Agent]) -> dict:
+def calculate_trait_statistics(agents: list[Agent]) -> dict:
     """
-    Calculate statistics for each gene across the population.
+    Calculate statistics for each personality trait across the population.
     
-    Returns dict with mean, std, min, max for numeric genes
-    and frequency distribution for categorical genes.
+    Returns dict with mean, std, min, max for each trait.
     """
-    import statistics
-    
     stats = {}
     
-    # Collect gene values
-    gene_values: dict[str, list] = {}
-    for agent in agents:
-        for gene, value in agent.genes.items():
-            if gene not in gene_values:
-                gene_values[gene] = []
-            gene_values[gene].append(value)
+    # Collect trait values
+    trait_values: dict[str, list[float]] = {trait: [] for trait in PERSONALITY_TRAITS}
     
-    for gene, values in gene_values.items():
+    for agent in agents:
+        traits = agent.personality.to_dict()
+        for trait in PERSONALITY_TRAITS:
+            trait_values[trait].append(traits[trait])
+    
+    for trait, values in trait_values.items():
         if not values:
             continue
         
-        if isinstance(values[0], float):
-            stats[gene] = {
-                "type": "numeric",
-                "mean": statistics.mean(values),
-                "std": statistics.stdev(values) if len(values) > 1 else 0,
-                "min": min(values),
-                "max": max(values),
-            }
-        elif isinstance(values[0], str):
-            # Categorical (like reasoning_depth)
-            from collections import Counter
-            counts = Counter(values)
-            stats[gene] = {
-                "type": "categorical",
-                "distribution": dict(counts),
-                "mode": counts.most_common(1)[0][0] if counts else None,
-            }
-        elif isinstance(values[0], list):
-            # List type (like strategy_keywords)
-            all_keywords = []
-            for v in values:
-                all_keywords.extend(v)
-            from collections import Counter
-            counts = Counter(all_keywords)
-            stats[gene] = {
-                "type": "keywords",
-                "frequency": dict(counts),
-                "most_common": counts.most_common(5),
-            }
+        stats[trait] = {
+            "mean": statistics.mean(values),
+            "std": statistics.stdev(values) if len(values) > 1 else 0,
+            "min": min(values),
+            "max": max(values),
+        }
     
     return stats
+
+
+# Legacy alias
+calculate_gene_statistics = calculate_trait_statistics
+
+
+def get_trait_evolution_summary(agents: list[Agent]) -> dict:
+    """
+    Get a summary of how traits evolved (for display).
+    
+    Returns traits sorted by how much they changed from neutral (0.5).
+    """
+    stats = calculate_trait_statistics(agents)
+    
+    # Sort by distance from neutral (0.5)
+    trait_distances = []
+    for trait, data in stats.items():
+        mean = data["mean"]
+        distance = abs(mean - 0.5)
+        direction = "high" if mean > 0.5 else "low"
+        trait_distances.append({
+            "trait": trait,
+            "mean": mean,
+            "distance_from_neutral": distance,
+            "direction": direction,
+            "std": data["std"],
+        })
+    
+    # Sort by distance (most evolved traits first)
+    trait_distances.sort(key=lambda x: x["distance_from_neutral"], reverse=True)
+    
+    return {
+        "traits": trait_distances,
+        "most_evolved": trait_distances[0]["trait"] if trait_distances else None,
+        "least_evolved": trait_distances[-1]["trait"] if trait_distances else None,
+    }
+
+
+def analyze_survival(
+    gen0_agents: list[Agent],
+    final_agents: list[Agent],
+) -> dict:
+    """
+    Analyze which traits survived evolution.
+    
+    Compare generation 0 traits to final generation traits.
+    """
+    gen0_stats = calculate_trait_statistics(gen0_agents)
+    final_stats = calculate_trait_statistics(final_agents)
+    
+    changes = {}
+    for trait in PERSONALITY_TRAITS:
+        gen0_mean = gen0_stats.get(trait, {}).get("mean", 0.5)
+        final_mean = final_stats.get(trait, {}).get("mean", 0.5)
+        change = final_mean - gen0_mean
+        
+        changes[trait] = {
+            "gen0_mean": gen0_mean,
+            "final_mean": final_mean,
+            "change": change,
+            "direction": "increased" if change > 0.05 else "decreased" if change < -0.05 else "stable",
+        }
+    
+    return changes
 
 
 def analyze_lineage(agents: list[Agent]) -> dict:
     """
     Analyze the lineage/ancestry of agents.
     
-    Returns information about parent-child relationships
-    and how many agents descend from each original agent.
+    Returns information about parent-child relationships.
     """
-    # Build family tree
     lineage = {
         "agents_by_generation": {},
         "parent_child_edges": [],

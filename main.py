@@ -9,17 +9,24 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.table import Table
+from rich.live import Live
+from rich.layout import Layout
+from rich.text import Text
 from rich import print as rprint
 
 from src.agent import Agent, create_initial_population
 from src.tournament import run_tournament, TournamentResult, get_tournament_statistics
-from src.evolution import evolve_generation, calculate_gene_statistics
+from src.evolution import evolve_generation, calculate_trait_statistics
 from src.llm import LLMClient
 from src.config import NUM_AGENTS, NUM_GENERATIONS, LOGS_DIR
+from src.live_state import (
+    update_live_state, reset_live_state, mark_complete, mark_evolving,
+    MatchSummary
+)
 
 console = Console()
 
@@ -46,7 +53,7 @@ def save_generation_log(
         "agents": [a.to_dict() for a in agents],
         "tournament": tournament_result.to_dict(),
         "statistics": get_tournament_statistics(tournament_result),
-        "gene_statistics": calculate_gene_statistics(agents),
+        "gene_statistics": calculate_trait_statistics(agents),
         "survivors": [a.id for a in survivors],
         "offspring": [a.id for a in offspring],
     }
@@ -111,11 +118,97 @@ def display_evolution_summary(survivors: list[Agent], offspring: list[Agent]) ->
     ))
 
 
+def build_live_display(
+    generation: int,
+    match_number: int,
+    total_matches: int,
+    agents: list[Agent],
+    recent_matches: list[dict],
+    current_match: Optional[tuple[Agent, Agent]] = None,
+) -> Panel:
+    """Build the live display panel for tournament progress."""
+    # Header with progress
+    progress_pct = (match_number / total_matches * 100) if total_matches > 0 else 0
+    progress_bar = "█" * int(progress_pct / 5) + "░" * (20 - int(progress_pct / 5))
+    header = Text()
+    header.append(f"Generation {generation}", style="bold cyan")
+    header.append(f" | Match {match_number}/{total_matches} ")
+    header.append(f"[{progress_bar}] {progress_pct:.0f}%", style="green")
+    
+    # Current match section
+    current_section = Text()
+    if current_match:
+        current_section.append("\n\nCurrent Match: ", style="bold yellow")
+        current_section.append(f"{current_match[0].id[:12]}", style="magenta")
+        current_section.append(" vs ", style="dim")
+        current_section.append(f"{current_match[1].id[:12]}", style="magenta")
+    
+    # Recent matches section
+    recent_section = Text()
+    if recent_matches:
+        recent_section.append("\n\nRecent Matches:\n", style="bold")
+        for match in recent_matches[:3]:
+            winner = match.get("winner_id")
+            a1_id = match["agent1_id"][:8]
+            a2_id = match["agent2_id"][:8]
+            a1_score = match["agent1_score"]
+            a2_score = match["agent2_score"]
+            a1_coop = match["agent1_cooperations"]
+            a1_def = match["agent1_defections"]
+            a2_coop = match["agent2_cooperations"]
+            a2_def = match["agent2_defections"]
+            
+            if winner:
+                winner_name = a1_id if winner == match["agent1_id"] else a2_id
+                recent_section.append(f"  {winner_name}", style="green")
+                recent_section.append(" beat ")
+                loser_name = a2_id if winner == match["agent1_id"] else a1_id
+                recent_section.append(f"{loser_name}", style="red")
+            else:
+                recent_section.append(f"  {a1_id} tied {a2_id}", style="yellow")
+            
+            recent_section.append(f" ({a1_score}-{a2_score})")
+            recent_section.append(f" | {a1_coop}C/{a1_def}D vs {a2_coop}C/{a2_def}D\n", style="dim")
+    
+    # Leaderboard section with personalities
+    leaderboard_section = Text()
+    leaderboard_section.append("\n\nLeaderboard:\n", style="bold")
+    sorted_agents = sorted(agents, key=lambda a: a.fitness, reverse=True)
+    for i, agent in enumerate(sorted_agents[:8], 1):
+        coop_rate = agent.cooperation_rate
+        fitness_bar = "▓" * min(10, agent.fitness // 5) if agent.fitness > 0 else ""
+        personality_desc = agent.personality.get_short_description()
+        
+        if i == 1:
+            style = "bold green"
+        elif i <= 4:
+            style = "green"
+        else:
+            style = "dim"
+        
+        leaderboard_section.append(f"  {i}. ", style="cyan")
+        leaderboard_section.append(f"{agent.id[:12]:<12}", style=style)
+        leaderboard_section.append(f" {agent.fitness:>3} pts ", style=style)
+        leaderboard_section.append(f"[{personality_desc[:15]:<15}]", style="italic dim")
+        leaderboard_section.append(f" {coop_rate:.0%}\n", style="dim")
+    
+    # Combine all sections
+    content = Group(header, current_section, recent_section, leaderboard_section)
+    
+    return Panel(
+        content,
+        title="[bold]Live Tournament[/bold]",
+        border_style="blue",
+        padding=(0, 1),
+    )
+
+
 async def run_evolution(
     num_generations: int = NUM_GENERATIONS,
     num_agents: int = NUM_AGENTS,
     use_cache: bool = True,
     verbose: bool = True,
+    live: bool = False,
 ) -> tuple[list[Agent], list[TournamentResult]]:
     """
     Run the complete evolutionary tournament.
@@ -125,6 +218,7 @@ async def run_evolution(
         num_agents: Number of agents in population
         use_cache: Whether to cache LLM responses
         verbose: Whether to print progress
+        live: Whether to show live tournament display
     
     Returns:
         Tuple of (final_population, tournament_results)
@@ -134,46 +228,121 @@ async def run_evolution(
     llm_client = LLMClient(use_cache=use_cache)
     all_results: list[TournamentResult] = []
     
+    # Track recent matches for live display
+    recent_matches: list[dict] = []
+    current_match_agents: Optional[tuple[Agent, Agent]] = None
+    
     if verbose:
         console.print(Panel(
             f"[bold]DarwinLM - Evolutionary Prisoner's Dilemma[/bold]\n"
-            f"Agents: {num_agents} | Generations: {num_generations}",
+            f"Agents: {num_agents} | Generations: {num_generations}" +
+            ("\n[cyan]Live mode enabled[/cyan]" if live else ""),
             title="Starting Evolution",
             border_style="blue"
         ))
     
     for gen in range(num_generations):
-        if verbose:
+        # Reset live state for new generation
+        if live:
+            reset_live_state(gen)
+            recent_matches = []
+        
+        if verbose and not live:
             console.print(f"\n[bold cyan]═══ Generation {gen} ═══[/bold cyan]")
         
-        # Run tournament
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            console=console,
-            disable=not verbose,
-        ) as progress:
-            task = progress.add_task(f"Running tournament...", total=100)
+        if live:
+            # Live mode with Rich Live display
+            live_display = None
+            match_count = 0
+            total_matches = (num_agents * (num_agents - 1)) // 2
             
-            def on_match_complete(result, completed, total):
-                progress.update(task, completed=int((completed / total) * 100))
+            def on_match_complete_live(result, completed, total):
+                nonlocal match_count, recent_matches, live_display
+                match_count = completed
+                
+                # Create match summary
+                summary = MatchSummary.from_match_result(result)
+                recent_matches.insert(0, summary.to_dict())
+                recent_matches = recent_matches[:5]
+                
+                # Update live state file for Streamlit
+                update_live_state(
+                    generation=gen,
+                    match_number=completed,
+                    total_matches=total,
+                    agents=agents,
+                    match_result=result,
+                    status="running",
+                )
+                
+                # Update live display
+                if live_display:
+                    live_display.update(build_live_display(
+                        generation=gen,
+                        match_number=completed,
+                        total_matches=total,
+                        agents=agents,
+                        recent_matches=recent_matches,
+                    ))
             
-            tournament_result = await run_tournament(
-                agents=agents,
-                generation=gen,
-                llm_client=llm_client,
-                on_match_complete=on_match_complete,
-            )
+            with Live(
+                build_live_display(gen, 0, total_matches, agents, []),
+                console=console,
+                refresh_per_second=4,
+            ) as live_display:
+                tournament_result = await run_tournament(
+                    agents=agents,
+                    generation=gen,
+                    llm_client=llm_client,
+                    on_match_complete=on_match_complete_live,
+                )
+                
+                # Final update
+                live_display.update(build_live_display(
+                    generation=gen,
+                    match_number=total_matches,
+                    total_matches=total_matches,
+                    agents=agents,
+                    recent_matches=recent_matches,
+                ))
+        else:
+            # Standard progress bar mode
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                console=console,
+                disable=not verbose,
+            ) as progress:
+                task = progress.add_task(f"Running tournament...", total=100)
+                
+                def on_match_complete(result, completed, total):
+                    progress.update(task, completed=int((completed / total) * 100))
+                
+                tournament_result = await run_tournament(
+                    agents=agents,
+                    generation=gen,
+                    llm_client=llm_client,
+                    on_match_complete=on_match_complete,
+                )
         
         all_results.append(tournament_result)
         
-        if verbose:
+        if verbose and not live:
             display_generation_summary(gen, agents, tournament_result)
+        elif live:
+            # Brief summary after live display
+            console.print(f"\n[bold cyan]Generation {gen} Complete[/bold cyan]")
+            stats = get_tournament_statistics(tournament_result)
+            console.print(f"  Top Agent: {agents[0].id[:12]} ({agents[0].fitness} pts)")
+            console.print(f"  Cooperation Rate: {stats.get('cooperation_rate', 0):.1%}")
         
         # Evolve (except for last generation)
         if gen < num_generations - 1:
+            if live:
+                mark_evolving(gen)
+            
             agents, survivors, offspring = evolve_generation(agents)
             
             if verbose:
@@ -192,6 +361,9 @@ async def run_evolution(
             )
             if verbose:
                 console.print(f"[dim]Saved: {log_file}[/dim]")
+    
+    if live:
+        mark_complete()
     
     if verbose:
         console.print(Panel(
@@ -259,6 +431,7 @@ def main():
         agents: int = typer.Option(NUM_AGENTS, "--agents", "-a", help="Number of agents"),
         no_cache: bool = typer.Option(False, "--no-cache", help="Disable LLM response caching"),
         quiet: bool = typer.Option(False, "--quiet", "-q", help="Reduce output verbosity"),
+        live: bool = typer.Option(False, "--live", "-l", help="Show live tournament display with running leaderboard"),
     ):
         """Run the evolutionary tournament."""
         asyncio.run(run_evolution(
@@ -266,6 +439,7 @@ def main():
             num_agents=agents,
             use_cache=not no_cache,
             verbose=not quiet,
+            live=live,
         ))
     
     @app.command()

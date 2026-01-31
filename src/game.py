@@ -1,9 +1,9 @@
-"""Prisoner's Dilemma game logic for single matchups."""
+"""Prisoner's Dilemma game logic with AI reasoning tracking."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Callable
 
 from src.agent import Agent
 from src.config import PAYOFF_MATRIX, ROUNDS_PER_MATCH
@@ -12,7 +12,7 @@ from src.llm import get_agent_decision, LLMClient, LLMResponse
 
 @dataclass
 class RoundResult:
-    """Result of a single round."""
+    """Result of a single round with full AI reasoning."""
     round_number: int
     agent1_id: str
     agent2_id: str
@@ -22,8 +22,17 @@ class RoundResult:
     agent2_score: int
     agent1_message: Optional[str] = None
     agent2_message: Optional[str] = None
-    agent1_reasoning: str = ""
-    agent2_reasoning: str = ""
+    agent1_thinking: str = ""  # AI's internal reasoning
+    agent2_thinking: str = ""
+    
+    # Legacy alias
+    @property
+    def agent1_reasoning(self) -> str:
+        return self.agent1_thinking
+    
+    @property
+    def agent2_reasoning(self) -> str:
+        return self.agent2_thinking
     
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -37,16 +46,18 @@ class RoundResult:
             "agent2_score": self.agent2_score,
             "agent1_message": self.agent1_message,
             "agent2_message": self.agent2_message,
-            "agent1_reasoning": self.agent1_reasoning,
-            "agent2_reasoning": self.agent2_reasoning,
+            "agent1_thinking": self.agent1_thinking,
+            "agent2_thinking": self.agent2_thinking,
         }
 
 
 @dataclass
 class MatchResult:
-    """Result of a complete match (10 rounds)."""
+    """Result of a complete match (10 rounds) with personalities."""
     agent1_id: str
     agent2_id: str
+    agent1_description: str = ""  # Short personality description
+    agent2_description: str = ""
     rounds: list[RoundResult] = field(default_factory=list)
     agent1_total_score: int = 0
     agent2_total_score: int = 0
@@ -66,14 +77,22 @@ class MatchResult:
             return self.agent2_id
         return None  # Tie
     
+    @property
+    def is_tie(self) -> bool:
+        """Check if match ended in a tie."""
+        return self.agent1_total_score == self.agent2_total_score
+    
     def to_dict(self) -> dict:
         """Convert to dictionary."""
         return {
             "agent1_id": self.agent1_id,
             "agent2_id": self.agent2_id,
+            "agent1_description": self.agent1_description,
+            "agent2_description": self.agent2_description,
             "agent1_total_score": self.agent1_total_score,
             "agent2_total_score": self.agent2_total_score,
             "winner_id": self.winner_id,
+            "is_tie": self.is_tie,
             "rounds": [r.to_dict() for r in self.rounds],
         }
 
@@ -90,7 +109,7 @@ def build_history_for_agent(
     agent_id: str,
     opponent_id: str,
 ) -> list[dict]:
-    """Build round history from perspective of a specific agent."""
+    """Build round history from perspective of a specific agent, including messages."""
     history = []
     for r in rounds:
         if r.agent1_id == agent_id:
@@ -99,6 +118,9 @@ def build_history_for_agent(
                 "your_move": r.agent1_move,
                 "their_move": r.agent2_move,
                 "your_score": r.agent1_score,
+                "their_score": r.agent2_score,
+                "your_message": r.agent1_message or "none",
+                "their_message": r.agent2_message or "none",
             })
         else:
             history.append({
@@ -106,8 +128,25 @@ def build_history_for_agent(
                 "your_move": r.agent2_move,
                 "their_move": r.agent1_move,
                 "your_score": r.agent2_score,
+                "their_score": r.agent1_score,
+                "your_message": r.agent2_message or "none",
+                "their_message": r.agent1_message or "none",
             })
     return history
+
+
+def get_running_scores(rounds: list[RoundResult], agent_id: str) -> tuple[int, int]:
+    """Get running scores from perspective of an agent."""
+    your_score = 0
+    their_score = 0
+    for r in rounds:
+        if r.agent1_id == agent_id:
+            your_score += r.agent1_score
+            their_score += r.agent2_score
+        else:
+            your_score += r.agent2_score
+            their_score += r.agent1_score
+    return your_score, their_score
 
 
 async def play_round(
@@ -119,30 +158,42 @@ async def play_round(
     agent2_last_message: Optional[str] = None,
     llm_client: Optional[LLMClient] = None,
 ) -> RoundResult:
-    """Play a single round between two agents."""
+    """Play a single round between two AI agents."""
     import asyncio
     
     # Build history from each agent's perspective
     history1 = build_history_for_agent(previous_rounds, agent1.id, agent2.id)
     history2 = build_history_for_agent(previous_rounds, agent2.id, agent1.id)
     
+    # Get running scores
+    score1, opp_score1 = get_running_scores(previous_rounds, agent1.id)
+    score2, opp_score2 = get_running_scores(previous_rounds, agent2.id)
+    
+    # Get personality descriptions for prompts
+    personality1 = agent1.personality.get_prompt_description()
+    personality2 = agent2.personality.get_prompt_description()
+    
     # Get both decisions in parallel
     response1_task = get_agent_decision(
         agent_id=agent1.id,
-        agent_genes=agent1.genes,
+        personality_description=personality1,
         opponent_id=agent2.id,
         round_history=history1,
         current_round=round_number,
+        your_score=score1,
+        their_score=opp_score1,
         opponent_message=agent2_last_message,
         client=llm_client,
     )
     
     response2_task = get_agent_decision(
         agent_id=agent2.id,
-        agent_genes=agent2.genes,
+        personality_description=personality2,
         opponent_id=agent1.id,
         round_history=history2,
         current_round=round_number,
+        your_score=score2,
+        their_score=opp_score2,
         opponent_message=agent1_last_message,
         client=llm_client,
     )
@@ -166,8 +217,8 @@ async def play_round(
         agent2_score=score2,
         agent1_message=response1.message,
         agent2_message=response2.message,
-        agent1_reasoning=response1.reasoning,
-        agent2_reasoning=response2.reasoning,
+        agent1_thinking=response1.thinking,
+        agent2_thinking=response2.thinking,
     )
 
 
@@ -177,8 +228,13 @@ async def play_match(
     num_rounds: int = ROUNDS_PER_MATCH,
     llm_client: Optional[LLMClient] = None,
 ) -> MatchResult:
-    """Play a complete match between two agents."""
-    result = MatchResult(agent1_id=agent1.id, agent2_id=agent2.id)
+    """Play a complete match between two AI agents."""
+    result = MatchResult(
+        agent1_id=agent1.id,
+        agent2_id=agent2.id,
+        agent1_description=agent1.personality.get_short_description(),
+        agent2_description=agent2.personality.get_short_description(),
+    )
     
     agent1_message: Optional[str] = None
     agent2_message: Optional[str] = None
@@ -214,10 +270,15 @@ async def play_match_with_callback(
     agent2: Agent,
     num_rounds: int = ROUNDS_PER_MATCH,
     llm_client: Optional[LLMClient] = None,
-    on_round_complete: Optional[callable] = None,
+    on_round_complete: Optional[Callable] = None,
 ) -> MatchResult:
-    """Play a match with optional callback after each round (for live visualization)."""
-    result = MatchResult(agent1_id=agent1.id, agent2_id=agent2.id)
+    """Play a match with callback after each round (for live visualization)."""
+    result = MatchResult(
+        agent1_id=agent1.id,
+        agent2_id=agent2.id,
+        agent1_description=agent1.personality.get_short_description(),
+        agent2_description=agent2.personality.get_short_description(),
+    )
     
     agent1_message: Optional[str] = None
     agent2_message: Optional[str] = None

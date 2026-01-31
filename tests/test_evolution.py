@@ -1,7 +1,7 @@
 """Unit tests for evolution module."""
 
 import pytest
-from src.agent import Agent, AgentDNA, create_initial_population
+from src.agent import Agent, AgentPersonality, create_initial_population
 from src.evolution import (
     select,
     tournament_select,
@@ -9,7 +9,7 @@ from src.evolution import (
     mutate,
     reproduce,
     evolve_generation,
-    calculate_gene_statistics,
+    calculate_trait_statistics,
 )
 
 
@@ -75,56 +75,39 @@ class TestCrossover:
         assert parent1.id in child.parent_ids
         assert parent2.id in child.parent_ids
     
-    def test_crossover_inherits_genes(self):
-        """Child genes should come from parents."""
+    def test_crossover_inherits_traits(self):
+        """Child traits should come from parents."""
         parent1 = Agent.create_random(generation=0)
         parent2 = Agent.create_random(generation=0)
         
         # Set distinct values
-        parent1.dna.cooperation_bias = 0.0
-        parent2.dna.cooperation_bias = 1.0
+        parent1.personality.trust = 0.0
+        parent2.personality.trust = 1.0
         
         children = [crossover(parent1, parent2) for _ in range(50)]
         
         # Child values should be between parent values (with some noise)
         for child in children:
-            assert 0.0 <= child.dna.cooperation_bias <= 1.0
-    
-    def test_crossover_merges_keywords(self):
-        """Keywords should be merged from both parents."""
-        parent1 = Agent.create_random(generation=0)
-        parent2 = Agent.create_random(generation=0)
-        
-        parent1.dna.strategy_keywords = ["aggressive"]
-        parent2.dna.strategy_keywords = ["forgiving"]
-        
-        children = [crossover(parent1, parent2) for _ in range(20)]
-        
-        # At least some children should have keywords from both
-        all_keywords = set()
-        for child in children:
-            all_keywords.update(child.dna.strategy_keywords)
-        
-        assert "aggressive" in all_keywords or "forgiving" in all_keywords
+            assert 0.0 <= child.personality.trust <= 1.0
 
 
 class TestMutation:
     """Tests for mutation function."""
     
-    def test_mutate_modifies_genes(self):
-        """Mutation should modify some genes."""
+    def test_mutate_modifies_traits(self):
+        """Mutation should modify some traits."""
         agent = Agent.create_random(generation=0)
-        original_genes = agent.dna.to_dict()
+        original_traits = agent.personality.to_dict()
         
         # High mutation rate to ensure changes
         mutate(agent, rate=1.0)
         
-        mutated_genes = agent.dna.to_dict()
+        mutated_traits = agent.personality.to_dict()
         
-        # At least some numeric genes should change
+        # At least some traits should change
         changes = 0
-        for gene in ["cooperation_bias", "retaliation_sensitivity", "forgiveness_rate"]:
-            if abs(original_genes[gene] - mutated_genes[gene]) > 0.01:
+        for trait in ["trust", "forgiveness", "vengefulness"]:
+            if abs(original_traits[trait] - mutated_traits[trait]) > 0.01:
                 changes += 1
         
         assert changes > 0
@@ -135,21 +118,21 @@ class TestMutation:
             agent = Agent.create_random(generation=0)
             mutate(agent, rate=1.0)
             
-            assert 0.0 <= agent.dna.cooperation_bias <= 1.0
-            assert 0.0 <= agent.dna.retaliation_sensitivity <= 1.0
-            assert 0.0 <= agent.dna.forgiveness_rate <= 1.0
+            assert 0.0 <= agent.personality.trust <= 1.0
+            assert 0.0 <= agent.personality.forgiveness <= 1.0
+            assert 0.0 <= agent.personality.vengefulness <= 1.0
     
     def test_low_mutation_rate(self):
-        """Low mutation rate should preserve most genes."""
+        """Low mutation rate should preserve most traits."""
         agent = Agent.create_random(generation=0)
-        original = agent.dna.to_dict()
+        original = agent.personality.to_dict()
         
         mutate(agent, rate=0.0)  # No mutation
-        mutated = agent.dna.to_dict()
+        mutated = agent.personality.to_dict()
         
-        # All numeric genes should be unchanged
-        for gene in ["cooperation_bias", "retaliation_sensitivity"]:
-            assert original[gene] == mutated[gene]
+        # All traits should be unchanged
+        for trait in ["trust", "forgiveness"]:
+            assert original[trait] == mutated[trait]
 
 
 class TestReproduce:
@@ -215,56 +198,62 @@ class TestEvolveGeneration:
         assert best_agent.id in survivor_ids
 
 
-class TestGeneStatistics:
-    """Tests for gene statistics calculation."""
+class TestTraitStatistics:
+    """Tests for trait statistics calculation."""
     
-    def test_calculate_gene_statistics(self):
+    def test_calculate_trait_statistics(self):
         """Should calculate correct statistics."""
         agents = create_initial_population(4)
         
         # Set known values
         for i, agent in enumerate(agents):
-            agent.dna.cooperation_bias = 0.25 * i  # 0.0, 0.25, 0.5, 0.75
+            agent.personality.trust = 0.25 * i  # 0.0, 0.25, 0.5, 0.75
         
-        stats = calculate_gene_statistics(agents)
+        stats = calculate_trait_statistics(agents)
         
-        assert "cooperation_bias" in stats
-        assert stats["cooperation_bias"]["type"] == "numeric"
-        assert abs(stats["cooperation_bias"]["mean"] - 0.375) < 0.01
-        assert stats["cooperation_bias"]["min"] == 0.0
-        assert stats["cooperation_bias"]["max"] == 0.75
+        assert "trust" in stats
+        assert abs(stats["trust"]["mean"] - 0.375) < 0.01
+        assert stats["trust"]["min"] == 0.0
+        assert stats["trust"]["max"] == 0.75
 
 
-class TestAgentDNA:
-    """Tests for AgentDNA class."""
+class TestAgentPersonality:
+    """Tests for AgentPersonality class."""
     
-    def test_dna_to_dict(self):
-        """DNA should serialize to dict."""
-        dna = AgentDNA.random()
-        d = dna.to_dict()
+    def test_personality_to_dict(self):
+        """Personality should serialize to dict."""
+        personality = AgentPersonality.random()
+        d = personality.to_dict()
         
-        assert "cooperation_bias" in d
-        assert "strategy_keywords" in d
-        assert isinstance(d["strategy_keywords"], list)
+        assert "trust" in d
+        assert "forgiveness" in d
+        assert isinstance(d["trust"], float)
     
-    def test_dna_from_dict(self):
-        """DNA should deserialize from dict."""
-        original = AgentDNA.random()
+    def test_personality_from_dict(self):
+        """Personality should deserialize from dict."""
+        original = AgentPersonality.random()
         d = original.to_dict()
-        restored = AgentDNA.from_dict(d)
+        restored = AgentPersonality.from_dict(d)
         
-        assert restored.cooperation_bias == original.cooperation_bias
-        assert restored.strategy_keywords == original.strategy_keywords
+        assert restored.trust == original.trust
+        assert restored.forgiveness == original.forgiveness
     
-    def test_random_dna_is_valid(self):
-        """Random DNA should have valid values."""
+    def test_random_personality_is_valid(self):
+        """Random personality should have valid values."""
         for _ in range(20):
-            dna = AgentDNA.random()
+            personality = AgentPersonality.random()
             
-            assert 0.0 <= dna.cooperation_bias <= 1.0
-            assert 0.0 <= dna.retaliation_sensitivity <= 1.0
-            assert dna.reasoning_depth in ["shallow", "medium", "deep"]
-            assert len(dna.strategy_keywords) >= 1
+            assert 0.0 <= personality.trust <= 1.0
+            assert 0.0 <= personality.forgiveness <= 1.0
+            assert 0.0 <= personality.vengefulness <= 1.0
+    
+    def test_short_description(self):
+        """Should generate short description."""
+        personality = AgentPersonality(trust=0.9, honesty=0.1)
+        desc = personality.get_short_description()
+        
+        assert isinstance(desc, str)
+        assert len(desc) > 0
 
 
 class TestAgent:
@@ -284,7 +273,7 @@ class TestAgent:
         
         assert baseline.id == "baseline_agent"
         assert baseline.generation == -1
-        assert baseline.dna.cooperation_bias == 0.5
+        assert baseline.personality.trust == 0.5
     
     def test_record_move(self):
         """Should track moves correctly."""

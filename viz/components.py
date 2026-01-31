@@ -412,3 +412,329 @@ def create_lineage_tree(generation_data: list[dict]) -> go.Figure:
     )
     
     return fig
+
+
+# =============================================================================
+# Live Tournament Components
+# =============================================================================
+
+def create_live_leaderboard(leaderboard: list[dict]) -> None:
+    """Render a live updating leaderboard with personality info."""
+    if not leaderboard:
+        st.info("No agents yet...")
+        return
+    
+    # Create a styled table
+    for i, entry in enumerate(leaderboard[:8], 1):
+        agent_id = entry.get("agent_id", "unknown")[:12]
+        fitness = entry.get("fitness", 0)
+        matches = entry.get("matches_played", 0)
+        coop_rate = entry.get("cooperation_rate", 0.5)
+        personality = entry.get("personality_description", "")
+        
+        # Determine style based on rank
+        if i == 1:
+            rank_emoji = "🥇"
+        elif i == 2:
+            rank_emoji = "🥈"
+        elif i == 3:
+            rank_emoji = "🥉"
+        elif i <= 4:
+            rank_emoji = "✅"
+        else:
+            rank_emoji = "❌"
+        
+        col1, col2, col3 = st.columns([1, 4, 2])
+        
+        with col1:
+            st.write(f"{rank_emoji} **{i}**")
+        with col2:
+            st.write(f"`{agent_id}`")
+            if personality:
+                st.caption(f"_{personality}_")
+        with col3:
+            st.write(f"**{fitness}** pts")
+            coop_pct = coop_rate * 100
+            color = COOPERATE_COLOR if coop_pct >= 50 else DEFECT_COLOR
+            st.markdown(f"<span style='color:{color};font-size:0.8em'>{coop_pct:.0f}% coop</span>", unsafe_allow_html=True)
+
+
+def create_live_match_card(match: dict) -> None:
+    """Render a compact match result card for live view."""
+    agent1_id = match.get("agent1_id", "?")[:8]
+    agent2_id = match.get("agent2_id", "?")[:8]
+    score1 = match.get("agent1_score", 0)
+    score2 = match.get("agent2_score", 0)
+    winner_id = match.get("winner_id")
+    a1_coop = match.get("agent1_cooperations", 0)
+    a1_def = match.get("agent1_defections", 0)
+    a2_coop = match.get("agent2_cooperations", 0)
+    a2_def = match.get("agent2_defections", 0)
+    
+    # Determine winner styling
+    if winner_id:
+        if winner_id == match.get("agent1_id"):
+            a1_style = f"color: {COOPERATE_COLOR}; font-weight: bold;"
+            a2_style = f"color: {DEFECT_COLOR};"
+            result = "🏆"
+        else:
+            a1_style = f"color: {DEFECT_COLOR};"
+            a2_style = f"color: {COOPERATE_COLOR}; font-weight: bold;"
+            result = "🏆"
+    else:
+        a1_style = "color: #fbbf24;"
+        a2_style = "color: #fbbf24;"
+        result = "🤝"
+    
+    st.markdown(f"""
+    <div style="background: #374151; padding: 8px; border-radius: 6px; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="{a1_style}">{agent1_id}</span>
+            <span style="color: #9ca3af;">{score1} - {score2}</span>
+            <span style="{a2_style}">{agent2_id}</span>
+        </div>
+        <div style="font-size: 0.75em; color: #6b7280; margin-top: 4px;">
+            {a1_coop}C/{a1_def}D vs {a2_coop}C/{a2_def}D
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def create_cooperation_gauge(cooperation_rate: float) -> None:
+    """Create a gauge showing cooperation rate."""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=cooperation_rate * 100,
+        title={"text": "Cooperation Rate"},
+        number={"suffix": "%"},
+        gauge={
+            "axis": {"range": [0, 100]},
+            "bar": {"color": COOPERATE_COLOR if cooperation_rate >= 0.5 else DEFECT_COLOR},
+            "bgcolor": BACKGROUND_COLOR,
+            "steps": [
+                {"range": [0, 30], "color": "rgba(239, 68, 68, 0.3)"},
+                {"range": [30, 70], "color": "rgba(251, 191, 36, 0.3)"},
+                {"range": [70, 100], "color": "rgba(34, 197, 94, 0.3)"},
+            ],
+            "threshold": {
+                "line": {"color": "white", "width": 2},
+                "thickness": 0.75,
+                "value": 50,
+            },
+        },
+    ))
+    
+    fig.update_layout(
+        height=200,
+        margin=dict(l=20, r=20, t=40, b=20),
+        paper_bgcolor=BACKGROUND_COLOR,
+        font=dict(color="white"),
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# =============================================================================
+# AI Thinking Display Components
+# =============================================================================
+
+def create_thinking_display(round_data: dict, agent_num: int = 1) -> None:
+    """Display an agent's thinking process for a round."""
+    prefix = f"agent{agent_num}_"
+    
+    agent_id = round_data.get(f"{prefix}id", "?")[:8]
+    move = round_data.get(f"{prefix}move", "?")
+    thinking = round_data.get(f"{prefix}thinking", "No thinking recorded")
+    message = round_data.get(f"{prefix}message", "none")
+    score = round_data.get(f"{prefix}score", 0)
+    
+    move_color = COOPERATE_COLOR if move == "COOPERATE" else DEFECT_COLOR
+    move_emoji = "🤝" if move == "COOPERATE" else "🗡️"
+    
+    st.markdown(f"""
+    <div style="background: #374151; padding: 12px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid {move_color};">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-weight: bold; color: white;">{agent_id}</span>
+            <span style="color: {move_color}; font-weight: bold;">{move_emoji} {move} (+{score})</span>
+        </div>
+        <div style="color: #9ca3af; font-size: 0.9em; font-style: italic; margin-bottom: 6px;">
+            💭 "{thinking[:200]}{"..." if len(thinking) > 200 else ""}"
+        </div>
+        <div style="color: #6b7280; font-size: 0.8em;">
+            💬 Message: "{message if message else 'none'}"
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def create_round_display(round_data: dict) -> None:
+    """Display a complete round with both agents' thinking."""
+    round_num = round_data.get("round", "?")
+    
+    st.markdown(f"### Round {round_num}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        create_thinking_display(round_data, agent_num=1)
+    
+    with col2:
+        create_thinking_display(round_data, agent_num=2)
+    
+    # Show outcome
+    move1 = round_data.get("agent1_move", "?")
+    move2 = round_data.get("agent2_move", "?")
+    score1 = round_data.get("agent1_score", 0)
+    score2 = round_data.get("agent2_score", 0)
+    
+    if move1 == "COOPERATE" and move2 == "COOPERATE":
+        outcome = "🤝 Mutual Cooperation"
+        outcome_color = COOPERATE_COLOR
+    elif move1 == "DEFECT" and move2 == "DEFECT":
+        outcome = "💥 Mutual Defection"
+        outcome_color = DEFECT_COLOR
+    elif move1 == "DEFECT":
+        outcome = f"🗡️ Agent 1 exploited Agent 2"
+        outcome_color = "#fbbf24"
+    else:
+        outcome = f"🗡️ Agent 2 exploited Agent 1"
+        outcome_color = "#fbbf24"
+    
+    st.markdown(f"<div style='text-align: center; color: {outcome_color}; padding: 8px;'>{outcome} ({score1} - {score2})</div>", unsafe_allow_html=True)
+
+
+def create_personality_radar_multi(agents_data: list[dict], title: str = "Personality Comparison") -> go.Figure:
+    """Create a radar chart comparing multiple agent personalities."""
+    traits = [
+        "trust", "forgiveness", "vengefulness", "risk_tolerance",
+        "patience", "empathy", "honesty", "aggression"
+    ]
+    
+    fig = go.Figure()
+    
+    colors = [COOPERATE_COLOR, DEFECT_COLOR, "#3b82f6", "#fbbf24", "#8b5cf6"]
+    
+    for i, agent in enumerate(agents_data[:5]):
+        personality = agent.get("personality", agent.get("dna", {}))
+        
+        values = [personality.get(t, 0.5) for t in traits]
+        values.append(values[0])  # Close the radar
+        
+        agent_id = agent.get("id", f"Agent {i+1}")[:12]
+        
+        fig.add_trace(go.Scatterpolar(
+            r=values,
+            theta=[t.replace("_", " ").title() for t in traits] + [traits[0].replace("_", " ").title()],
+            fill="toself",
+            name=agent_id,
+            line=dict(color=colors[i % len(colors)]),
+            fillcolor=f"rgba{tuple(list(int(colors[i % len(colors)].lstrip('#')[j:j+2], 16) for j in (0, 2, 4)) + [0.2])}",
+        ))
+    
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 1],
+            ),
+            bgcolor=BACKGROUND_COLOR,
+        ),
+        showlegend=True,
+        template="plotly_dark",
+        paper_bgcolor=BACKGROUND_COLOR,
+        title=title,
+    )
+    
+    return fig
+
+
+def create_trait_evolution_chart(generation_data: list[dict], trait: str) -> go.Figure:
+    """Create a chart showing how a specific trait evolved over generations."""
+    generations = []
+    means = []
+    mins = []
+    maxs = []
+    
+    for data in generation_data:
+        gen = data.get("generation", 0)
+        trait_stats = data.get("gene_statistics", {}).get(trait, {})
+        
+        if trait_stats:
+            generations.append(gen)
+            means.append(trait_stats.get("mean", 0.5))
+            mins.append(trait_stats.get("min", 0))
+            maxs.append(trait_stats.get("max", 1))
+    
+    fig = go.Figure()
+    
+    # Add range band
+    fig.add_trace(go.Scatter(
+        x=generations + generations[::-1],
+        y=maxs + mins[::-1],
+        fill="toself",
+        fillcolor="rgba(59, 130, 246, 0.2)",
+        line=dict(color="rgba(255,255,255,0)"),
+        name="Range",
+        showlegend=False,
+    ))
+    
+    # Add mean line
+    fig.add_trace(go.Scatter(
+        x=generations,
+        y=means,
+        mode="lines+markers",
+        name=f"{trait.replace('_', ' ').title()} (mean)",
+        line=dict(color="#3b82f6", width=2),
+        marker=dict(size=8),
+    ))
+    
+    # Add neutral line
+    fig.add_hline(y=0.5, line_dash="dash", line_color=NEUTRAL_COLOR, annotation_text="Neutral")
+    
+    fig.update_layout(
+        title=f"{trait.replace('_', ' ').title()} Evolution",
+        xaxis_title="Generation",
+        yaxis_title="Value",
+        yaxis=dict(range=[0, 1]),
+        template="plotly_dark",
+        paper_bgcolor=BACKGROUND_COLOR,
+        plot_bgcolor=BACKGROUND_COLOR,
+    )
+    
+    return fig
+
+
+def create_evolution_summary_card(gen0_stats: dict, final_stats: dict) -> None:
+    """Display a summary of how evolution changed the population."""
+    st.subheader("🧬 Evolution Summary")
+    
+    # Calculate biggest changes
+    changes = []
+    for trait in gen0_stats:
+        if trait in final_stats:
+            gen0_mean = gen0_stats[trait].get("mean", 0.5)
+            final_mean = final_stats[trait].get("mean", 0.5)
+            change = final_mean - gen0_mean
+            changes.append({
+                "trait": trait,
+                "gen0": gen0_mean,
+                "final": final_mean,
+                "change": change,
+            })
+    
+    # Sort by absolute change
+    changes.sort(key=lambda x: abs(x["change"]), reverse=True)
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Traits that INCREASED:**")
+        for c in changes:
+            if c["change"] > 0.05:
+                st.markdown(f"- {c['trait'].replace('_', ' ').title()}: {c['gen0']:.0%} → {c['final']:.0%} (+{c['change']:.0%})")
+    
+    with col2:
+        st.markdown("**Traits that DECREASED:**")
+        for c in changes:
+            if c["change"] < -0.05:
+                st.markdown(f"- {c['trait'].replace('_', ' ').title()}: {c['gen0']:.0%} → {c['final']:.0%} ({c['change']:.0%})")
