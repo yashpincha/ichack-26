@@ -1146,7 +1146,7 @@ _interactive_completion_menu() {
     }
 
     clear_menu() {
-        # Move cursor up by the number of menu lines
+        # Calculate total number of menu lines
         local num_lines=0
         for i in "${!options[@]}"; do
             ((num_lines++))  # Command line
@@ -1158,11 +1158,10 @@ _interactive_completion_menu() {
                 ((num_lines++))
             fi
         done
-        for ((i=0; i<num_lines; i++)); do
-            tput cuu1   # Move cursor up one line
-            printf '\r' # Move to beginning of line
-            tput el     # Clear entire line
-        done
+
+        # Move cursor up all at once, then clear from cursor down
+        tput cuu $num_lines  # Move cursor up N lines at once
+        tput ed              # Clear from cursor to end of screen
     }
 
     # Initial menu display
