@@ -556,7 +556,7 @@ _autocompletesh() {
 
 # Interactive autocomplete function that can be bound to a key
 _interactive_autocomplete_widget() {
-    local user_input completions
+    local user_input completions show_explanations
 
     # Get current line content
     user_input="${READLINE_LINE}"
@@ -564,6 +564,15 @@ _interactive_autocomplete_widget() {
     # If line is empty, return
     if [[ -z "$user_input" ]]; then
         return
+    fi
+
+    # Check if user wants explanations
+    show_explanations=false
+    if [[ "$user_input" == *"--explain"* ]]; then
+        show_explanations=true
+        # Remove the "--explain" flag from the input before sending to API
+        user_input="${user_input%%--explain*}"
+        user_input="${user_input%% }"  # Trim trailing space
     fi
 
     # Load config
@@ -608,7 +617,7 @@ _interactive_autocomplete_widget() {
 
     # Show interactive menu and execute selected command
     if [[ -n "$completions" ]]; then
-        _interactive_completion_menu "$completions"
+        _interactive_completion_menu "$completions" "$show_explanations"
 
         # Clear the readline buffer after execution
         READLINE_LINE=""
@@ -630,6 +639,7 @@ show_help() {
     echo -e "\e[1;32mUsage:\e[0m"
     echo "  - Press Tab twice for suggestions (standard completion)"
     echo "  - Press Ctrl+Space for interactive menu (navigate with ↑/↓, Enter to execute)"
+    echo "  - Add '--explain' to your command to show explanations in the interactive menu"
     echo
     echo "Commands:"
     echo "  command             Run autocomplete (simulate double Tab)"
@@ -975,7 +985,7 @@ enable_command() {
     bind -x '"\C-@": _interactive_autocomplete_widget'
 
     echo_green "Interactive autocomplete enabled!"
-    echo -e "\e[90mPress Ctrl+Space for interactive command suggestions!\e[0m"
+    echo -e "\e[90mPress Ctrl+Space for interactive suggestions (add '--explain' for explanations)\e[0m"
 }
 
 disable_command() {
@@ -1073,6 +1083,7 @@ get_key() {
 
 _interactive_completion_menu() {
     local completions_str="$1"
+    local show_explanations="${2:-false}"
     local options=()
     local explanations=()
 
@@ -1114,32 +1125,32 @@ _interactive_completion_menu() {
         for i in "${!options[@]}"; do
             if [[ $i -eq $selected ]]; then
                 echo -e "  \e[1;32m▶ \e[1;97m${options[i]}\e[0m"
-                if [[ -n "${explanations[i]}" ]]; then
+                if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
                     echo -e "    \e[2;37m${explanations[i]}\e[0m"
                 fi
             else
                 echo -e "    \e[90m${options[i]}\e[0m"
-                if [[ -n "${explanations[i]}" ]]; then
+                if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
                     echo -e "    \e[2;90m${explanations[i]}\e[0m"
                 fi
             fi
-            # Add blank line between options (except after the last one)
-            if [[ $i -lt $((${#options[@]} - 1)) ]]; then
+            # Add blank line between options (except after the last one, and only if showing explanations)
+            if [[ "$show_explanations" == "true" && $i -lt $((${#options[@]} - 1)) ]]; then
                 echo
             fi
         done
     }
 
     clear_menu() {
-        # Move cursor up by the number of menu lines (command + explanation + blank line per option)
+        # Move cursor up by the number of menu lines
         local num_lines=0
         for i in "${!options[@]}"; do
             ((num_lines++))  # Command line
-            if [[ -n "${explanations[i]}" ]]; then
+            if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
                 ((num_lines++))  # Explanation line
             fi
-            # Blank line between options (except after the last one)
-            if [[ $i -lt $((${#options[@]} - 1)) ]]; then
+            # Blank line between options (except after the last one, and only if showing explanations)
+            if [[ "$show_explanations" == "true" && $i -lt $((${#options[@]} - 1)) ]]; then
                 ((num_lines++))
             fi
         done
