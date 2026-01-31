@@ -1,4 +1,4 @@
-# 🧬 DarwinLM: Evolutionary Prisoner's Dilemma Tournament
+# 🎨 AI r/place - Emergent Pixel Art with Evolving AI Agents
 
 > **ICHack 2026 - Marshall Wace Challenge: Emergent Behaviour**
 > 
@@ -6,55 +6,63 @@
 
 ## Overview
 
-DarwinLM recreates Robert Axelrod's famous 1980 Prisoner's Dilemma tournament—but with AI agents that have genetic "DNA" controlling their behavior. Through evolution, agents discover optimal strategies (like tit-for-tat) **without human design**.
+AI r/place simulates Reddit's famous r/place experiment, but with AI agents that have evolving personalities. Agents compete on a shared pixel canvas, placing pixels based on their unique traits. Through natural selection, winning strategies emerge organically.
 
-**Key Innovation:** Strategies **emerge** from evolutionary pressure rather than being programmed.
+**Key Innovation:** Visual patterns and strategies **emerge** from evolutionary pressure rather than being programmed.
 
 ## Demo
 
-Watch cooperation strategies evolve over generations:
+Watch AI agents battle for territory on a shared canvas:
 
 ```bash
-# Run evolution
-python main.py evolve --generations 10
+# Run simulation with live visualization
+python main.py simulate --generations 5 --live
 
-# Launch visualization dashboard
+# Launch dashboard
 streamlit run viz/dashboard.py
 ```
 
 ## How It Works
 
-### 1. Agent DNA
+### 1. Agent Personality
 
-Each agent has genetic traits that influence their decisions:
+Each agent has genetic traits that influence their pixel placement strategy:
 
 ```python
-AgentDNA:
-  cooperation_bias: 0.7      # Tendency to cooperate
-  retaliation_sensitivity: 0.8  # How quickly to punish defection
-  forgiveness_rate: 0.3      # Probability to forgive
-  memory_weight: 0.6         # How much history matters
-  strategy_keywords: ["adaptive", "cautious"]
+AgentPersonality:
+  territoriality: 0.7     # Tendency to cluster pixels together
+  aggression: 0.4         # Willingness to overwrite others
+  creativity: 0.6         # Creates patterns vs expands
+  cooperation: 0.3        # Builds on others' work
+  exploration: 0.8        # Ventures to new areas
+  color_loyalty: 0.9      # Sticks to preferred color
+  preferred_color: "blue"
+  loose_goal: "fill corners"
 ```
 
-### 2. Tournament (Prisoner's Dilemma)
+### 2. The Canvas
 
-| Player A \ B | Cooperate | Defect |
-|--------------|-----------|--------|
-| **Cooperate** | 3, 3 | 0, 5 |
-| **Defect** | 5, 0 | 1, 1 |
+- Agents share a pixel grid (default 16x16)
+- Each turn, every agent places one pixel
+- Agents can overwrite each other's pixels
+- The LLM sees the ASCII grid and decides placement
 
-- 8 agents compete in round-robin (28 matchups)
-- Each matchup is 10 rounds
-- Agents can send messages to each other
+```
+  0123456789...
+0 .R.B..G.....
+1 ..RR.BB.....
+2 .RRR.BBB....
+...
+```
 
 ### 3. Evolution
 
 After each generation:
-1. **Selection:** Top 4 agents survive
-2. **Crossover:** Parents create 4 offspring with mixed genes
-3. **Mutation:** Random changes to offspring DNA
-4. **Repeat:** New population of 8 competes again
+1. **Fitness Evaluation:** Territory owned + pixel survival time
+2. **Selection:** Top 2 agents survive
+3. **Crossover:** Parents create offspring with mixed genes
+4. **Mutation:** Random trait changes
+5. **Reset Canvas:** New generation starts fresh
 
 ## Quick Start
 
@@ -80,17 +88,17 @@ cp .env.example .env
 ### Running
 
 ```bash
-# Run evolution (default: 10 generations, 8 agents)
-python main.py evolve
+# Run simulation (default: 5 generations, 4 agents, 16x16 grid)
+python main.py simulate
 
 # Custom settings
-python main.py evolve --generations 20 --agents 8
+python main.py simulate --generations 10 --agents 6 --grid-size 20
 
 # View specific generation
-python main.py show 5
+python main.py show 3
 
-# Compare evolved vs baseline agent
-python main.py compare 9 --matches 10
+# Replay a generation turn-by-turn
+python main.py replay 4 --speed 0.2
 
 # Launch dashboard
 streamlit run viz/dashboard.py
@@ -101,14 +109,15 @@ streamlit run viz/dashboard.py
 ```
 ichack-26/
 ├── src/
-│   ├── agent.py        # Agent class with DNA
-│   ├── game.py         # Prisoner's Dilemma logic
-│   ├── tournament.py   # Round-robin orchestration
+│   ├── agent.py        # Agent class with personality traits
+│   ├── grid.py         # Pixel canvas implementation
+│   ├── simulation.py   # Turn-based simulation loop
 │   ├── evolution.py    # Selection, crossover, mutation
 │   ├── llm.py          # OpenAI/Anthropic integration
-│   └── config.py       # Settings and prompts
+│   ├── config.py       # Settings and prompts
+│   └── live_state.py   # Real-time state for dashboard
 ├── viz/
-│   ├── dashboard.py    # Streamlit main app
+│   ├── dashboard.py    # Streamlit visualization
 │   └── components.py   # Reusable UI components
 ├── logs/               # Generation JSON logs
 ├── tests/              # Unit tests
@@ -121,29 +130,31 @@ ichack-26/
 
 ### Emergent Strategies
 
-Watch agents discover classic strategies naturally:
+Watch agents naturally develop strategies:
 
-- **Tit-for-Tat:** Mirror opponent's last move
-- **Forgiving TFT:** Cooperate after punishment
-- **Always Defect:** In harsh environments
-- **Pavlov:** Win-stay, lose-switch
+- **Territorial:** Clusters pixels, defends area
+- **Explorer:** Spreads across the canvas
+- **Aggressive:** Actively overwrites others
+- **Cooperative:** Builds patterns with others
+
+### Personality Traits
+
+| Trait | Low | High |
+|-------|-----|------|
+| Territoriality | Spreads out randomly | Clusters near own pixels |
+| Aggression | Avoids others' pixels | Overwrites aggressively |
+| Creativity | Expands existing areas | Creates new patterns |
+| Cooperation | Ignores others | Builds on others' work |
+| Exploration | Stays in familiar areas | Ventures to empty areas |
+| Color Loyalty | Uses many colors | Sticks to preferred color |
 
 ### Visualization Dashboard
 
-- 📊 Fitness evolution charts
-- 🤖 Agent DNA cards with trait bars
-- 🎮 Live match viewer (round-by-round)
-- 🌳 Lineage tree showing ancestry
-- 📈 Gene evolution heatmaps
-
-### Async LLM Calls
-
-Parallel matchups for fast tournaments:
-
-```python
-matchups = list(itertools.combinations(agents, 2))
-results = await asyncio.gather(*[play_match(a1, a2) for a1, a2 in matchups])
-```
+- 🖼️ Live canvas updates
+- 🏆 Real-time leaderboard
+- 📊 Territory statistics
+- 🧬 Evolution analysis
+- 🔄 Generation replay
 
 ## Configuration
 
@@ -154,64 +165,75 @@ Edit `.env` or `src/config.py`:
 LLM_PROVIDER=openai
 LLM_MODEL=gpt-4o-mini
 
-# Evolution Settings
-NUM_AGENTS=8
-ROUNDS_PER_MATCH=10
-NUM_GENERATIONS=10
-MUTATION_RATE=0.15
+# Grid Settings
+GRID_WIDTH=16
+GRID_HEIGHT=16
+
+# Simulation Settings
+NUM_AGENTS=4
+TURNS_PER_GENERATION=50
+NUM_GENERATIONS=5
+MUTATION_RATE=0.2
 ```
 
 ## Success Metrics
 
-1. **Fitness Increase:** Generation 10 avg fitness > Generation 0
-2. **Strategy Emergence:** Recognizable patterns (TFT-like behavior)
-3. **Evolved Beats Baseline:** Best evolved agent wins >60% vs vanilla
-4. **Cooperation Evolution:** Cooperation rate changes meaningfully
+1. **Territory Growth:** Evolved agents control more territory over generations
+2. **Strategy Emergence:** Recognizable patterns develop (clustering, expansion)
+3. **Personality Divergence:** Traits evolve away from neutral (0.5)
+4. **Fitness Improvement:** Generation N fitness > Generation 0 fitness
 
 ## Technical Details
 
-### Decision Prompt
+### LLM Decision Prompt
 
-Agents receive their DNA traits as personality instructions:
+Agents receive:
+- ASCII grid state
+- Their personality traits
+- Current territory count
+- Recent placement history
+- Their loose goal
 
 ```
 YOUR PERSONALITY:
-- Cooperation tendency: 70%
-- Retaliation sensitivity: 80%
-- Forgiveness rate: 30%
-- Strategy style: adaptive, cautious
+- Territoriality: 70% (strongly prefers placing near own territory)
+- Aggression: 30% (avoids overwriting others)
+...
 
-Based on your personality, decide: COOPERATE or DEFECT
+CURRENT CANVAS STATE (16x16):
+  0123456789...
+0 .R.B..G.....
+...
+
+Based on your personality, decide where to place your next pixel.
+PLACE: x,y,color
+```
+
+### Fitness Function
+
+```python
+def evaluate_fitness(agent, grid):
+    territory = grid.get_territory_count(agent.id)
+    persistence = grid.get_average_pixel_lifespan(agent.id)
+    return territory * 2 + persistence
 ```
 
 ### Crossover
 
 ```python
 def crossover(parent1, parent2):
-    child_genes = {}
-    for gene in parent1.genes:
+    child_traits = {}
+    for trait in PERSONALITY_TRAITS:
         # 50/50 from each parent
         if random.random() < 0.5:
-            child_genes[gene] = parent1.genes[gene]
+            child_traits[trait] = parent1.traits[trait]
         else:
-            child_genes[gene] = parent2.genes[gene]
+            child_traits[trait] = parent2.traits[trait]
         
-        # Occasionally blend numeric genes
+        # Occasionally blend
         if random.random() < 0.3:
-            child_genes[gene] = (p1 + p2) / 2
-    return child_genes
-```
-
-### Mutation
-
-```python
-def mutate(agent, rate=0.15):
-    for gene, value in agent.genes.items():
-        if random.random() < rate:
-            if isinstance(value, float):
-                # Gaussian mutation
-                value += random.gauss(0, 0.15)
-                value = clamp(value, 0, 1)
+            child_traits[trait] = (p1 + p2) / 2
+    return child_traits
 ```
 
 ## Testing
@@ -227,15 +249,22 @@ pytest --cov=src
 pytest tests/test_evolution.py -v
 ```
 
+## Cost Estimation
+
+- 16x16 grid, 4 agents, 50 turns/generation, 5 generations
+- = 4 agents × 50 turns × 5 gens = **1,000 LLM calls**
+- With gpt-4o-mini: ~$1-2 per full run
+- Caching reduces repeated states significantly
+
 ## References
 
-- [Axelrod's Tournament (1980)](https://en.wikipedia.org/wiki/The_Evolution_of_Cooperation)
-- [Prisoner's Dilemma](https://en.wikipedia.org/wiki/Prisoner%27s_dilemma)
+- [Reddit r/place](https://en.wikipedia.org/wiki/R/place)
 - [Evolutionary Game Theory](https://en.wikipedia.org/wiki/Evolutionary_game_theory)
+- [Genetic Algorithms](https://en.wikipedia.org/wiki/Genetic_algorithm)
 
 ## Team
 
-ICHack 2026 Team - DarwinLM
+ICHack 2026 Team - AI r/place
 
 ## License
 

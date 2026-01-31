@@ -1,4 +1,4 @@
-"""Agent class with 12-trait personality system for true AI agents."""
+"""Agent class with personality traits for AI r/place simulation."""
 
 from __future__ import annotations
 
@@ -7,70 +7,55 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from src.grid import COLORS
+
 
 # Trait descriptions for prompt generation
 TRAIT_DESCRIPTIONS = {
-    "trust": {
-        "low": "highly suspicious of others, assumes bad intent",
-        "mid": "cautiously trusting, gives benefit of doubt",
-        "high": "very trusting, believes others are honest",
-    },
-    "forgiveness": {
-        "low": "never forgives betrayal, holds grudges forever",
-        "mid": "forgives after appropriate punishment",
-        "high": "forgives easily, quick to move past betrayal",
-    },
-    "vengefulness": {
-        "low": "rarely retaliates, turns the other cheek",
-        "mid": "retaliates proportionally to offense",
-        "high": "aggressively retaliates, punishes harshly",
-    },
-    "risk_tolerance": {
-        "low": "very risk-averse, plays it safe",
-        "mid": "takes calculated risks when odds are good",
-        "high": "loves risk, gambles for big rewards",
-    },
-    "patience": {
-        "low": "wants immediate rewards, short-term thinker",
-        "mid": "balances short and long-term gains",
-        "high": "patient strategist, invests in future",
-    },
-    "empathy": {
-        "low": "cares only about own score, ruthless",
-        "mid": "considers mutual benefit when convenient",
-        "high": "genuinely cares about mutual outcomes",
-    },
-    "honesty": {
-        "low": "lies freely, says whatever helps",
-        "mid": "honest when it doesn't cost much",
-        "high": "strongly values honesty, rarely lies",
-    },
-    "verbosity": {
-        "low": "silent or terse, few words",
-        "mid": "communicates key points clearly",
-        "high": "very talkative, explains reasoning",
+    "territoriality": {
+        "low": "prefers spreading out, doesn't care about clustering",
+        "mid": "balances expansion with some clustering",
+        "high": "strongly prefers placing pixels near own territory",
     },
     "aggression": {
-        "low": "gentle, friendly communication",
-        "mid": "firm but fair communication",
-        "high": "threatening, intimidating tone",
+        "low": "avoids overwriting others, prefers empty spaces",
+        "mid": "will overwrite others when strategic",
+        "high": "actively targets and overwrites other agents' pixels",
     },
-    "analytical": {
-        "low": "goes with gut feeling, intuitive",
-        "mid": "uses both analysis and intuition",
-        "high": "heavily analyzes patterns and data",
+    "creativity": {
+        "low": "expands existing areas, doesn't create new patterns",
+        "mid": "mixes expansion with occasional new placements",
+        "high": "loves creating new patterns and shapes",
     },
-    "adaptability": {
-        "low": "sticks to one strategy regardless",
-        "mid": "adjusts strategy when needed",
-        "high": "constantly adapts to opponent",
+    "cooperation": {
+        "low": "ignores others' work, purely self-focused",
+        "mid": "sometimes builds on others' patterns",
+        "high": "actively complements and builds on others' work",
     },
-    "endgame_awareness": {
-        "low": "ignores that game will end",
-        "mid": "aware of endgame implications",
-        "high": "always thinking about final rounds",
+    "exploration": {
+        "low": "sticks to familiar areas, conservative",
+        "mid": "occasionally ventures to new areas",
+        "high": "loves exploring empty/distant areas of the canvas",
+    },
+    "color_loyalty": {
+        "low": "uses many colors freely, no preference",
+        "mid": "mostly uses preferred color but varies",
+        "high": "almost always uses preferred color",
     },
 }
+
+# Possible loose goals for agents
+LOOSE_GOALS = [
+    "fill the corners",
+    "create a diagonal line",
+    "defend the center",
+    "spread across edges",
+    "create a pattern",
+    "maximize territory",
+    "surround other colors",
+    "create symmetry",
+    None,  # No specific goal
+]
 
 
 def get_trait_level(value: float) -> str:
@@ -91,89 +76,87 @@ def get_trait_description(trait: str, value: float) -> str:
 
 @dataclass
 class AgentPersonality:
-    """12-trait personality system for AI agents."""
+    """Personality traits for canvas-based AI agents."""
     
     # Core behavioral traits (0.0 to 1.0)
-    trust: float = 0.5              # How trusting of strangers
-    forgiveness: float = 0.5        # How easily forgives betrayal
-    vengefulness: float = 0.5       # How strongly retaliates
-    risk_tolerance: float = 0.5     # Willingness to take chances
-    patience: float = 0.5           # Long-term vs short-term thinking
-    empathy: float = 0.5            # Cares about opponent's outcome
+    territoriality: float = 0.5    # Tendency to cluster pixels together
+    aggression: float = 0.5        # Willingness to overwrite others
+    creativity: float = 0.5        # Creates patterns vs expands
+    cooperation: float = 0.5       # Builds on others' work
+    exploration: float = 0.5       # Ventures to new areas
+    color_loyalty: float = 0.5     # Sticks to preferred color
     
-    # Communication style (0.0 to 1.0)
-    honesty: float = 0.5            # How truthful in messages
-    verbosity: float = 0.5          # How much they communicate
-    aggression: float = 0.5         # Threatening vs friendly tone
+    # Color preference
+    preferred_color: str = "red"
     
-    # Strategic style (0.0 to 1.0)
-    analytical: float = 0.5         # Relies on patterns vs intuition
-    adaptability: float = 0.5       # Changes strategy vs consistent
-    endgame_awareness: float = 0.5  # Thinks about final rounds
+    # Optional loose goal
+    loose_goal: Optional[str] = None
     
-    def to_dict(self) -> dict[str, float]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert personality to dictionary."""
         return {
-            "trust": self.trust,
-            "forgiveness": self.forgiveness,
-            "vengefulness": self.vengefulness,
-            "risk_tolerance": self.risk_tolerance,
-            "patience": self.patience,
-            "empathy": self.empathy,
-            "honesty": self.honesty,
-            "verbosity": self.verbosity,
+            "territoriality": self.territoriality,
             "aggression": self.aggression,
-            "analytical": self.analytical,
-            "adaptability": self.adaptability,
-            "endgame_awareness": self.endgame_awareness,
+            "creativity": self.creativity,
+            "cooperation": self.cooperation,
+            "exploration": self.exploration,
+            "color_loyalty": self.color_loyalty,
+            "preferred_color": self.preferred_color,
+            "loose_goal": self.loose_goal,
         }
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentPersonality":
         """Create personality from dictionary."""
         return cls(
-            trust=data.get("trust", 0.5),
-            forgiveness=data.get("forgiveness", 0.5),
-            vengefulness=data.get("vengefulness", 0.5),
-            risk_tolerance=data.get("risk_tolerance", 0.5),
-            patience=data.get("patience", 0.5),
-            empathy=data.get("empathy", 0.5),
-            honesty=data.get("honesty", 0.5),
-            verbosity=data.get("verbosity", 0.5),
+            territoriality=data.get("territoriality", 0.5),
             aggression=data.get("aggression", 0.5),
-            analytical=data.get("analytical", 0.5),
-            adaptability=data.get("adaptability", 0.5),
-            endgame_awareness=data.get("endgame_awareness", 0.5),
+            creativity=data.get("creativity", 0.5),
+            cooperation=data.get("cooperation", 0.5),
+            exploration=data.get("exploration", 0.5),
+            color_loyalty=data.get("color_loyalty", 0.5),
+            preferred_color=data.get("preferred_color", "red"),
+            loose_goal=data.get("loose_goal"),
         )
     
     @classmethod
     def random(cls) -> "AgentPersonality":
         """Create a completely random personality."""
         return cls(
-            trust=random.random(),
-            forgiveness=random.random(),
-            vengefulness=random.random(),
-            risk_tolerance=random.random(),
-            patience=random.random(),
-            empathy=random.random(),
-            honesty=random.random(),
-            verbosity=random.random(),
+            territoriality=random.random(),
             aggression=random.random(),
-            analytical=random.random(),
-            adaptability=random.random(),
-            endgame_awareness=random.random(),
+            creativity=random.random(),
+            cooperation=random.random(),
+            exploration=random.random(),
+            color_loyalty=random.random(),
+            preferred_color=random.choice(COLORS),
+            loose_goal=random.choice(LOOSE_GOALS),
         )
     
     def get_prompt_description(self) -> str:
         """Generate personality description for the AI prompt."""
         lines = []
-        traits = self.to_dict()
+        
+        # Numeric traits
+        traits = {
+            "territoriality": self.territoriality,
+            "aggression": self.aggression,
+            "creativity": self.creativity,
+            "cooperation": self.cooperation,
+            "exploration": self.exploration,
+            "color_loyalty": self.color_loyalty,
+        }
         
         for trait, value in traits.items():
             pct = int(value * 100)
             desc = get_trait_description(trait, value)
             trait_name = trait.replace("_", " ").title()
             lines.append(f"- {trait_name}: {pct}% ({desc})")
+        
+        lines.append(f"- Preferred Color: {self.preferred_color}")
+        
+        if self.loose_goal:
+            lines.append(f"- Goal: {self.loose_goal}")
         
         return "\n".join(lines)
     
@@ -182,38 +165,44 @@ class AgentPersonality:
         descriptors = []
         
         # Pick most extreme traits
-        traits = self.to_dict()
+        traits = {
+            "territoriality": self.territoriality,
+            "aggression": self.aggression,
+            "creativity": self.creativity,
+            "cooperation": self.cooperation,
+            "exploration": self.exploration,
+            "color_loyalty": self.color_loyalty,
+        }
+        
         sorted_traits = sorted(traits.items(), key=lambda x: abs(x[1] - 0.5), reverse=True)
         
-        for trait, value in sorted_traits[:3]:
+        for trait, value in sorted_traits[:2]:
             if value < 0.3:
-                if trait == "trust":
-                    descriptors.append("Suspicious")
-                elif trait == "honesty":
-                    descriptors.append("Deceptive")
-                elif trait == "patience":
-                    descriptors.append("Impulsive")
-                elif trait == "empathy":
-                    descriptors.append("Ruthless")
-                elif trait == "forgiveness":
-                    descriptors.append("Grudging")
+                if trait == "territoriality":
+                    descriptors.append("Scattered")
+                elif trait == "aggression":
+                    descriptors.append("Peaceful")
+                elif trait == "creativity":
+                    descriptors.append("Expansive")
+                elif trait == "cooperation":
+                    descriptors.append("Solo")
+                elif trait == "exploration":
+                    descriptors.append("Homebody")
+                elif trait == "color_loyalty":
+                    descriptors.append("Colorful")
             elif value > 0.7:
-                if trait == "trust":
-                    descriptors.append("Trusting")
-                elif trait == "honesty":
-                    descriptors.append("Honest")
-                elif trait == "patience":
-                    descriptors.append("Patient")
-                elif trait == "empathy":
-                    descriptors.append("Empathetic")
-                elif trait == "vengefulness":
-                    descriptors.append("Vengeful")
-                elif trait == "risk_tolerance":
-                    descriptors.append("Risk-Taker")
+                if trait == "territoriality":
+                    descriptors.append("Territorial")
                 elif trait == "aggression":
                     descriptors.append("Aggressive")
-                elif trait == "analytical":
-                    descriptors.append("Analytical")
+                elif trait == "creativity":
+                    descriptors.append("Creative")
+                elif trait == "cooperation":
+                    descriptors.append("Cooperative")
+                elif trait == "exploration":
+                    descriptors.append("Explorer")
+                elif trait == "color_loyalty":
+                    descriptors.append("Loyal")
         
         if not descriptors:
             descriptors = ["Balanced"]
@@ -221,33 +210,28 @@ class AgentPersonality:
         return ", ".join(descriptors[:2])
     
     def get_trait_list(self) -> list[str]:
-        """Get list of trait names."""
-        return list(self.to_dict().keys())
+        """Get list of numeric trait names."""
+        return ["territoriality", "aggression", "creativity", "cooperation", "exploration", "color_loyalty"]
 
 
-# Legacy alias for backward compatibility
+# Alias for compatibility
 AgentDNA = AgentPersonality
 
 
 @dataclass
 class Agent:
-    """An AI agent with personality that competes in Prisoner's Dilemma."""
+    """An AI agent that places pixels on the canvas."""
     
     id: str
     generation: int
     personality: AgentPersonality
     parent_ids: list[str] = field(default_factory=list)
     fitness: int = 0
-    matches_played: int = 0
     
     # Track statistics
-    total_cooperations: int = 0
-    total_defections: int = 0
-    
-    # Track deception (new)
-    lies_told: int = 0
-    promises_kept: int = 0
-    promises_broken: int = 0
+    pixels_placed: int = 0
+    pixels_lost: int = 0  # Overwritten by others
+    overwrites: int = 0   # Times overwriting others
     
     def __post_init__(self):
         """Ensure parent_ids is a list."""
@@ -265,59 +249,40 @@ class Agent:
         return self.personality.to_dict()
     
     @property
-    def cooperation_rate(self) -> float:
-        """Calculate cooperation rate from history."""
-        total = self.total_cooperations + self.total_defections
-        if total == 0:
-            return 0.5
-        return self.total_cooperations / total
+    def preferred_color(self) -> str:
+        """Get agent's preferred color."""
+        return self.personality.preferred_color
     
     @property
-    def avg_fitness_per_match(self) -> float:
-        """Calculate average fitness per match."""
-        if self.matches_played == 0:
+    def survival_rate(self) -> float:
+        """Calculate what percentage of placed pixels survived."""
+        if self.pixels_placed == 0:
             return 0.0
-        return self.fitness / self.matches_played
+        survived = self.pixels_placed - self.pixels_lost
+        return max(0, survived) / self.pixels_placed
     
-    @property
-    def deception_rate(self) -> float:
-        """Calculate how often agent breaks promises."""
-        total = self.promises_kept + self.promises_broken
-        if total == 0:
-            return 0.0
-        return self.promises_broken / total
+    def record_placement(self) -> None:
+        """Record that agent placed a pixel."""
+        self.pixels_placed += 1
     
-    def record_move(self, move: str) -> None:
-        """Record a move for statistics."""
-        if move == "COOPERATE":
-            self.total_cooperations += 1
-        else:
-            self.total_defections += 1
+    def record_pixel_lost(self) -> None:
+        """Record that one of agent's pixels was overwritten."""
+        self.pixels_lost += 1
     
-    def record_lie(self) -> None:
-        """Record that the agent lied."""
-        self.lies_told += 1
-    
-    def record_promise_kept(self) -> None:
-        """Record that agent kept a promise."""
-        self.promises_kept += 1
-    
-    def record_promise_broken(self) -> None:
-        """Record that agent broke a promise."""
-        self.promises_broken += 1
+    def record_overwrite(self) -> None:
+        """Record that agent overwrote another's pixel."""
+        self.overwrites += 1
     
     def add_fitness(self, points: int) -> None:
         """Add points to fitness score."""
         self.fitness += points
     
-    def increment_matches(self) -> None:
-        """Increment match counter."""
-        self.matches_played += 1
-    
     def reset_fitness(self) -> None:
-        """Reset fitness for new generation (keep stats for analysis)."""
+        """Reset fitness and stats for new generation."""
         self.fitness = 0
-        self.matches_played = 0
+        self.pixels_placed = 0
+        self.pixels_lost = 0
+        self.overwrites = 0
     
     def to_dict(self) -> dict[str, Any]:
         """Serialize agent to dictionary."""
@@ -325,22 +290,17 @@ class Agent:
             "id": self.id,
             "generation": self.generation,
             "personality": self.personality.to_dict(),
-            "dna": self.personality.to_dict(),  # Legacy compatibility
             "parent_ids": self.parent_ids.copy(),
             "fitness": self.fitness,
-            "matches_played": self.matches_played,
-            "total_cooperations": self.total_cooperations,
-            "total_defections": self.total_defections,
-            "lies_told": self.lies_told,
-            "promises_kept": self.promises_kept,
-            "promises_broken": self.promises_broken,
+            "pixels_placed": self.pixels_placed,
+            "pixels_lost": self.pixels_lost,
+            "overwrites": self.overwrites,
             "short_description": self.personality.get_short_description(),
         }
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Agent":
         """Deserialize agent from dictionary."""
-        # Support both "personality" and legacy "dna" keys
         personality_data = data.get("personality", data.get("dna", {}))
         
         return cls(
@@ -349,12 +309,9 @@ class Agent:
             personality=AgentPersonality.from_dict(personality_data),
             parent_ids=data.get("parent_ids", []),
             fitness=data.get("fitness", 0),
-            matches_played=data.get("matches_played", 0),
-            total_cooperations=data.get("total_cooperations", 0),
-            total_defections=data.get("total_defections", 0),
-            lies_told=data.get("lies_told", 0),
-            promises_kept=data.get("promises_kept", 0),
-            promises_broken=data.get("promises_broken", 0),
+            pixels_placed=data.get("pixels_placed", 0),
+            pixels_lost=data.get("pixels_lost", 0),
+            overwrites=data.get("overwrites", 0),
         )
     
     @classmethod
@@ -383,32 +340,28 @@ class Agent:
             personality=AgentPersonality.from_dict(self.personality.to_dict()),
             parent_ids=self.parent_ids.copy(),
             fitness=self.fitness,
-            matches_played=self.matches_played,
-            total_cooperations=self.total_cooperations,
-            total_defections=self.total_defections,
-            lies_told=self.lies_told,
-            promises_kept=self.promises_kept,
-            promises_broken=self.promises_broken,
+            pixels_placed=self.pixels_placed,
+            pixels_lost=self.pixels_lost,
+            overwrites=self.overwrites,
         )
     
     def __repr__(self) -> str:
         desc = self.personality.get_short_description()
-        return f"Agent({self.id[:12]}, {desc}, fitness={self.fitness})"
+        return f"Agent({self.id[:12]}, {self.preferred_color}, {desc}, fitness={self.fitness})"
     
     def summary(self) -> str:
         """Get a human-readable summary of the agent."""
         desc = self.personality.get_short_description()
         return (
             f"Agent {self.id} (Gen {self.generation}) - {desc}\n"
-            f"  Fitness: {self.fitness} ({self.avg_fitness_per_match:.1f}/match)\n"
-            f"  Cooperation Rate: {self.cooperation_rate:.1%}\n"
-            f"  Deception Rate: {self.deception_rate:.1%}\n"
-            f"  Key Traits: Trust={self.personality.trust:.0%}, "
-            f"Vengefulness={self.personality.vengefulness:.0%}, "
-            f"Honesty={self.personality.honesty:.0%}"
+            f"  Color: {self.preferred_color}\n"
+            f"  Fitness: {self.fitness}\n"
+            f"  Pixels Placed: {self.pixels_placed}, Lost: {self.pixels_lost}\n"
+            f"  Survival Rate: {self.survival_rate:.1%}\n"
+            f"  Goal: {self.personality.loose_goal or 'None'}"
         )
 
 
-def create_initial_population(num_agents: int = 8) -> list[Agent]:
+def create_initial_population(num_agents: int = 4) -> list[Agent]:
     """Create the initial population of completely random agents."""
     return [Agent.create_random(generation=0) for _ in range(num_agents)]

@@ -1,6 +1,7 @@
-"""Configuration constants, payoff matrix, and prompts for DarwinLM."""
+"""Configuration constants and prompts for AI r/place simulation."""
 
 import os
+from pathlib import Path
 from typing import Literal
 from dotenv import load_dotenv
 
@@ -12,33 +13,30 @@ load_dotenv()
 
 LLM_PROVIDER: Literal["openai", "anthropic"] = os.getenv("LLM_PROVIDER", "openai")
 LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
-LLM_TEMPERATURE: float = 0.9  # Higher for more personality variation
-LLM_MAX_TOKENS: int = 500  # More tokens for thinking step
+LLM_TEMPERATURE: float = 0.7  # Balanced for creativity + consistency
+LLM_MAX_TOKENS: int = 300  # Shorter responses for pixel decisions
 
 # API Keys
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 
 # =============================================================================
-# Game Configuration
+# Grid Configuration
 # =============================================================================
 
-NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "3"))
-ROUNDS_PER_MATCH: int = int(os.getenv("ROUNDS_PER_MATCH", "10"))
-NUM_GENERATIONS: int = int(os.getenv("NUM_GENERATIONS", "3"))  # 3 generations to see emergence
+GRID_WIDTH: int = int(os.getenv("GRID_WIDTH", "16"))
+GRID_HEIGHT: int = int(os.getenv("GRID_HEIGHT", "16"))
 
-# Payoff Matrix: (player_payoff, opponent_payoff)
-# Format: PAYOFF_MATRIX[player_move][opponent_move]
-PAYOFF_MATRIX: dict[str, dict[str, tuple[int, int]]] = {
-    "COOPERATE": {
-        "COOPERATE": (3, 3),  # Mutual cooperation
-        "DEFECT": (0, 5),     # Sucker's payoff
-    },
-    "DEFECT": {
-        "COOPERATE": (5, 0),  # Temptation payoff
-        "DEFECT": (1, 1),     # Mutual defection
-    },
-}
+# Available colors for pixels
+COLORS: list[str] = ["red", "blue", "green", "yellow", "purple", "orange", "cyan", "pink"]
+
+# =============================================================================
+# Simulation Configuration
+# =============================================================================
+
+NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "4"))
+TURNS_PER_GENERATION: int = int(os.getenv("TURNS_PER_GENERATION", "50"))
+NUM_GENERATIONS: int = int(os.getenv("NUM_GENERATIONS", "5"))
 
 # =============================================================================
 # Evolution Configuration
@@ -46,7 +44,7 @@ PAYOFF_MATRIX: dict[str, dict[str, tuple[int, int]]] = {
 
 MUTATION_RATE: float = float(os.getenv("MUTATION_RATE", "0.2"))
 MUTATION_SIGMA: float = 0.2  # Standard deviation for Gaussian mutation
-SURVIVORS_PER_GENERATION: int = 2  # Top N agents survive (half of population)
+SURVIVORS_PER_GENERATION: int = 2  # Top N agents survive (half of 4)
 BLENDING_PROBABILITY: float = 0.3  # Probability to blend numeric genes during crossover
 
 # Gene value bounds
@@ -55,102 +53,97 @@ GENE_MAX: float = 1.0
 
 # List of personality traits for evolution
 PERSONALITY_TRAITS: list[str] = [
-    "trust",
-    "forgiveness",
-    "vengefulness",
-    "risk_tolerance",
-    "patience",
-    "empathy",
-    "honesty",
-    "verbosity",
+    "territoriality",
     "aggression",
-    "analytical",
-    "adaptability",
-    "endgame_awareness",
+    "creativity",
+    "cooperation",
+    "exploration",
+    "color_loyalty",
 ]
 
 # =============================================================================
-# AI Agent Prompt - Full Reasoning System
+# Fitness Weights
 # =============================================================================
 
-DECISION_PROMPT: str = """You are an AI agent in a Prisoner's Dilemma tournament. Your ONLY goal is to SURVIVE and score as many points as possible to pass on your genes to the next generation.
+FITNESS_TERRITORY_WEIGHT: float = 2.0  # Points per pixel owned at end
+FITNESS_PERSISTENCE_WEIGHT: float = 1.0  # Points per average turn survived
+FITNESS_OVERWRITE_PENALTY: float = 0.0  # Optional penalty for aggression
+
+# =============================================================================
+# AI Agent Prompt for Pixel Decisions
+# =============================================================================
+
+PIXEL_DECISION_PROMPT: str = """You are an AI agent in an r/place-style canvas simulation. Your goal is to place pixels strategically based on your personality.
 
 YOUR PERSONALITY:
 {personality_description}
 
-GAME RULES:
-- COOPERATE + COOPERATE = Both get 3 points (mutual benefit)
-- DEFECT + COOPERATE = You get 5, they get 0 (you exploit them)  
-- COOPERATE + DEFECT = You get 0, they get 5 (they exploit you)
-- DEFECT + DEFECT = Both get 1 point (mutual punishment)
+CURRENT CANVAS STATE ({width}x{height} grid):
+{grid_ascii}
 
-CURRENT SITUATION:
-Round {current_round} of {total_rounds} against {opponent_id}
-Your score so far: {your_score} | Their score: {their_score}
+Legend: . = empty, R = red, B = blue, G = green, Y = yellow, P = purple, O = orange, C = cyan, K = pink
 
-MATCH HISTORY:
-{round_history}
+YOUR CURRENT STATUS:
+- Your color: {agent_color}
+- Your territory: {territory_count} pixels
+- Turn: {current_turn} of {total_turns}
 
-{opponent_message_section}
+RECENT ACTIVITY:
+{recent_history}
 
-OPPONENT ANALYSIS:
-{opponent_analysis}
+YOUR TASK:
+Based on your personality traits and goals, decide where to place your next pixel.
 
-YOUR TASK - Think through this decision as YOUR personality:
-
-1. ANALYZE: What does the history tell you about this opponent? Can you trust them?
-2. STRATEGIZE: Based on your personality traits, what should you do?
-3. DECEIVE OR NOT: Your honesty is {honesty_level}. 
-   - If LOW honesty: You SHOULD lie in your message to manipulate them
-   - If HIGH honesty: You prefer to be truthful
-   - Consider: Can you trick them into cooperating while you defect?
-4. ENDGAME: Is this late in the match? Should you betray them before they betray you?
-
-IMPORTANT: Your message can be a LIE. You can say "I'll cooperate" and then DEFECT. 
-This is a valid strategy if your honesty trait is low. Survival is everything.
+Think about:
+1. Your territoriality: Should you place near your existing pixels or spread out?
+2. Your aggression: Should you overwrite others' pixels or avoid conflict?
+3. Your exploration: Should you venture to empty/new areas?
+4. Your goal: {goal_text}
 
 Respond in this EXACT format:
 
-THINKING: [Your internal reasoning. 2-4 sentences. Which traits drive your decision? Are you planning to deceive?]
+THINKING: [1-2 sentences explaining your reasoning based on your personality]
 
-MESSAGE: [What you SAY to opponent. Can be a lie! Max 100 chars, or NONE]
+PLACE: x,y,color
 
-DECISION: [COOPERATE or DEFECT]"""
+Where x is column (0-{max_x}), y is row (0-{max_y}), and color is one of: {colors}
+If you're loyal to your color, prefer using {agent_color}."""
 
-OPPONENT_MESSAGE_SECTION: str = """THEIR MESSAGE TO YOU: "{opponent_message}"
-Evaluate: Does this message seem genuine? Does it match their past behavior?"""
+NO_HISTORY_TEXT: str = "No pixels placed yet - this is the start of the generation."
 
-NO_MESSAGE_SECTION: str = "THEIR MESSAGE: None (they stayed silent)"
-
-NO_HISTORY_TEXT: str = """This is Round 1 - your first interaction with this opponent.
-You know nothing about them yet. How does your trust level affect your opening move?"""
-
-HISTORY_ENTRY_TEMPLATE: str = """Round {round_num}:
-  You: {your_move} | Them: {their_move} | Scores: +{your_score} / +{their_score}
-  Your message: "{your_message}"
-  Their message: "{their_message}" """
-
-OPPONENT_ANALYSIS_TEMPLATE: str = """Based on the history:
-- Their cooperation rate: {coop_rate}
-- Times they defected after promising cooperation: {broken_promises}
-- Times they retaliated after you defected: {retaliations}
-- Their apparent strategy: {apparent_strategy}"""
-
-NO_ANALYSIS_TEXT: str = "No data yet - this is your first round with this opponent."
+HISTORY_ENTRY_TEMPLATE: str = "Turn {turn}: {agent_id} placed {color} at ({x},{y})"
 
 # =============================================================================
 # Logging Configuration
 # =============================================================================
 
-LOGS_DIR: str = "logs"
+# Use absolute path to ensure consistency across different working directories
+_PROJECT_ROOT = Path(__file__).parent.parent
+LOGS_DIR: str = str(_PROJECT_ROOT / "logs")
 LOG_FORMAT: str = "json"
 
 # =============================================================================
 # Visualization Configuration
 # =============================================================================
 
-COOPERATE_COLOR: str = "#22c55e"  # Green
-DEFECT_COLOR: str = "#ef4444"     # Red
-NEUTRAL_COLOR: str = "#6b7280"    # Gray
-BACKGROUND_COLOR: str = "#1f2937" # Dark gray
-WARNING_COLOR: str = "#fbbf24"    # Yellow/Amber
+# Color hex codes for visualization
+COLOR_HEX = {
+    "red": "#ef4444",
+    "blue": "#3b82f6",
+    "green": "#22c55e",
+    "yellow": "#eab308",
+    "purple": "#a855f7",
+    "orange": "#f97316",
+    "cyan": "#06b6d4",
+    "pink": "#ec4899",
+    "empty": "#1f2937",
+}
+
+BACKGROUND_COLOR: str = "#0f172a"
+GRID_LINE_COLOR: str = "#334155"
+
+# =============================================================================
+# Live State Configuration
+# =============================================================================
+
+LIVE_STATE_FILE: str = str(_PROJECT_ROOT / ".live_state.json")

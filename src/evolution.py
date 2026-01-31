@@ -1,4 +1,4 @@
-"""Evolutionary algorithms for AI agent personalities."""
+"""Evolutionary algorithms for AI agent personalities in r/place simulation."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Optional
 from collections import Counter
 
 from src.agent import Agent, AgentPersonality
+from src.grid import Grid, COLORS
 from src.config import (
     MUTATION_RATE,
     MUTATION_SIGMA,
@@ -58,6 +59,7 @@ def crossover(parent1: Agent, parent2: Agent) -> Agent:
     Create a child agent by mixing parent personalities.
     
     Uses uniform crossover with occasional trait blending.
+    Also handles color preference inheritance.
     
     Args:
         parent1: First parent agent
@@ -70,6 +72,7 @@ def crossover(parent1: Agent, parent2: Agent) -> Agent:
     traits2 = parent2.personality.to_dict()
     child_traits = {}
     
+    # Crossover numeric traits
     for trait in PERSONALITY_TRAITS:
         # Randomly choose from either parent
         if random.random() < 0.5:
@@ -85,6 +88,27 @@ def crossover(parent1: Agent, parent2: Agent) -> Agent:
             value = max(GENE_MIN, min(GENE_MAX, avg + noise))
         
         child_traits[trait] = value
+    
+    # Inherit preferred color from one parent (with small chance of mutation)
+    if random.random() < 0.9:
+        # 90% inherit from a parent
+        child_traits["preferred_color"] = random.choice([
+            traits1["preferred_color"],
+            traits2["preferred_color"],
+        ])
+    else:
+        # 10% random new color
+        child_traits["preferred_color"] = random.choice(COLORS)
+    
+    # Inherit loose goal from one parent (or mutate)
+    if random.random() < 0.7:
+        child_traits["loose_goal"] = random.choice([
+            traits1.get("loose_goal"),
+            traits2.get("loose_goal"),
+        ])
+    else:
+        from src.agent import LOOSE_GOALS
+        child_traits["loose_goal"] = random.choice(LOOSE_GOALS)
     
     return Agent(
         id=f"agent_{uuid.uuid4().hex[:8]}",
@@ -115,6 +139,15 @@ def mutate(agent: Agent, rate: float = MUTATION_RATE) -> Agent:
         old_val = traits[trait]
         new_val = old_val + random.gauss(0, MUTATION_SIGMA)
         traits[trait] = max(GENE_MIN, min(GENE_MAX, new_val))
+    
+    # Small chance to mutate color
+    if random.random() < rate * 0.5:  # Half rate for color
+        traits["preferred_color"] = random.choice(COLORS)
+    
+    # Small chance to mutate goal
+    if random.random() < rate * 0.3:  # Lower rate for goal
+        from src.agent import LOOSE_GOALS
+        traits["loose_goal"] = random.choice(LOOSE_GOALS)
     
     # Update agent's personality
     agent.personality = AgentPersonality.from_dict(traits)
@@ -216,6 +249,10 @@ def calculate_trait_statistics(agents: list[Agent]) -> dict:
             "max": max(values),
         }
     
+    # Also track color distribution
+    color_counts = Counter(a.preferred_color for a in agents)
+    stats["color_distribution"] = dict(color_counts)
+    
     return stats
 
 
@@ -233,7 +270,10 @@ def get_trait_evolution_summary(agents: list[Agent]) -> dict:
     
     # Sort by distance from neutral (0.5)
     trait_distances = []
-    for trait, data in stats.items():
+    for trait in PERSONALITY_TRAITS:
+        if trait not in stats:
+            continue
+        data = stats[trait]
         mean = data["mean"]
         distance = abs(mean - 0.5)
         direction = "high" if mean > 0.5 else "low"
@@ -252,6 +292,7 @@ def get_trait_evolution_summary(agents: list[Agent]) -> dict:
         "traits": trait_distances,
         "most_evolved": trait_distances[0]["trait"] if trait_distances else None,
         "least_evolved": trait_distances[-1]["trait"] if trait_distances else None,
+        "color_distribution": stats.get("color_distribution", {}),
     }
 
 

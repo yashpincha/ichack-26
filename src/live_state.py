@@ -1,355 +1,186 @@
-"""Live state management for real-time tournament visualization."""
+"""Live state management for real-time dashboard updates."""
 
 from __future__ import annotations
 
 import json
-import os
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Any
 
-from src.config import LOGS_DIR
-
-
-LIVE_STATE_FILE = os.path.join(LOGS_DIR, "live_state.json")
-
-
-@dataclass
-class RoundInteraction:
-    """A single round interaction for the interactions feed."""
-    match_id: str
-    round_num: int
-    agent1_id: str
-    agent2_id: str
-    agent1_description: str
-    agent2_description: str
-    agent1_thinking: str
-    agent2_thinking: str
-    agent1_message: Optional[str]
-    agent2_message: Optional[str]
-    agent1_action: str
-    agent2_action: str
-    agent1_score: int
-    agent2_score: int
-    agent1_lied: bool
-    agent2_lied: bool
-    outcome: str  # "mutual_cooperation", "mutual_defection", "agent1_exploited", "agent2_exploited"
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    
-    def to_dict(self) -> dict:
-        return asdict(self)
-    
-    @classmethod
-    def from_round_result(cls, round_result, match_id: str, a1_desc: str, a2_desc: str) -> "RoundInteraction":
-        """Create from a RoundResult object."""
-        return cls(
-            match_id=match_id,
-            round_num=round_result.round_number,
-            agent1_id=round_result.agent1_id,
-            agent2_id=round_result.agent2_id,
-            agent1_description=a1_desc,
-            agent2_description=a2_desc,
-            agent1_thinking=round_result.agent1_thinking[:300] if round_result.agent1_thinking else "",
-            agent2_thinking=round_result.agent2_thinking[:300] if round_result.agent2_thinking else "",
-            agent1_message=round_result.agent1_message,
-            agent2_message=round_result.agent2_message,
-            agent1_action=round_result.agent1_move,
-            agent2_action=round_result.agent2_move,
-            agent1_score=round_result.agent1_score,
-            agent2_score=round_result.agent2_score,
-            agent1_lied=round_result.agent1_lied,
-            agent2_lied=round_result.agent2_lied,
-            outcome=round_result.outcome,
-        )
-
-
-@dataclass
-class MatchSummary:
-    """Summary of a completed match for live display."""
-    agent1_id: str
-    agent2_id: str
-    agent1_score: int
-    agent2_score: int
-    agent1_cooperations: int
-    agent1_defections: int
-    agent2_cooperations: int
-    agent2_defections: int
-    winner_id: Optional[str]
-    agent1_description: str = ""
-    agent2_description: str = ""
-    agent1_lies: int = 0
-    agent2_lies: int = 0
-    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
-    
-    def to_dict(self) -> dict:
-        return asdict(self)
-    
-    @classmethod
-    def from_match_result(cls, match_result) -> "MatchSummary":
-        """Create summary from a MatchResult object."""
-        a1_coop = sum(1 for r in match_result.rounds if r.agent1_move == "COOPERATE")
-        a1_defect = sum(1 for r in match_result.rounds if r.agent1_move == "DEFECT")
-        a2_coop = sum(1 for r in match_result.rounds if r.agent2_move == "COOPERATE")
-        a2_defect = sum(1 for r in match_result.rounds if r.agent2_move == "DEFECT")
-        a1_lies = sum(1 for r in match_result.rounds if r.agent1_lied)
-        a2_lies = sum(1 for r in match_result.rounds if r.agent2_lied)
-        
-        return cls(
-            agent1_id=match_result.agent1_id,
-            agent2_id=match_result.agent2_id,
-            agent1_score=match_result.agent1_total_score,
-            agent2_score=match_result.agent2_total_score,
-            agent1_cooperations=a1_coop,
-            agent1_defections=a1_defect,
-            agent2_cooperations=a2_coop,
-            agent2_defections=a2_defect,
-            winner_id=match_result.winner_id,
-            agent1_description=getattr(match_result, 'agent1_description', ''),
-            agent2_description=getattr(match_result, 'agent2_description', ''),
-            agent1_lies=a1_lies,
-            agent2_lies=a2_lies,
-        )
-
-
-@dataclass
-class LeaderboardEntry:
-    """Entry in the live leaderboard."""
-    agent_id: str
-    fitness: int
-    matches_played: int
-    cooperation_rate: float
-    generation: int
-    personality_description: str = ""
-    lies_told: int = 0
-    
-    def to_dict(self) -> dict:
-        return asdict(self)
-    
-    @classmethod
-    def from_agent(cls, agent) -> "LeaderboardEntry":
-        """Create entry from an Agent object."""
-        return cls(
-            agent_id=agent.id,
-            fitness=agent.fitness,
-            matches_played=agent.matches_played,
-            cooperation_rate=agent.cooperation_rate,
-            generation=agent.generation,
-            personality_description=agent.personality.get_short_description(),
-            lies_told=agent.lies_told,
-        )
+from src.config import LIVE_STATE_FILE
 
 
 @dataclass
 class LiveState:
-    """Complete live state for tournament visualization."""
+    """Current state of the simulation for live visualization."""
+    
+    status: str = "idle"  # idle, running, evolving, complete
     generation: int = 0
-    match_number: int = 0
-    total_matches: int = 3  # 3 agents = 3 matches per generation
-    status: str = "idle"
+    turn: int = 0
+    total_turns: int = 0
+    
+    # Grid state
+    grid_width: int = 16
+    grid_height: int = 16
+    grid_pixels: list[list[dict]] = field(default_factory=list)
+    
+    # Agent leaderboard
     leaderboard: list[dict] = field(default_factory=list)
-    recent_matches: list[dict] = field(default_factory=list)
-    recent_rounds: list[dict] = field(default_factory=list)  # NEW: Full round interactions
-    current_match: Optional[dict] = None
     
-    # Aggregate stats
-    total_cooperations: int = 0
-    total_defections: int = 0
-    mutual_cooperations: int = 0
-    mutual_defections: int = 0
-    total_lies: int = 0
+    # Recent turn results
+    recent_turns: list[dict] = field(default_factory=list)
     
-    last_updated: str = field(default_factory=lambda: datetime.now().isoformat())
+    # Statistics
+    total_pixels_placed: int = 0
+    fill_rate: float = 0.0
+    
+    @property
+    def progress_percent(self) -> float:
+        if self.total_turns == 0:
+            return 0.0
+        return (self.turn / self.total_turns) * 100
     
     def to_dict(self) -> dict:
         return {
-            "generation": self.generation,
-            "match_number": self.match_number,
-            "total_matches": self.total_matches,
             "status": self.status,
+            "generation": self.generation,
+            "turn": self.turn,
+            "total_turns": self.total_turns,
+            "grid_width": self.grid_width,
+            "grid_height": self.grid_height,
+            "grid_pixels": self.grid_pixels,
             "leaderboard": self.leaderboard,
-            "recent_matches": self.recent_matches,
-            "recent_rounds": self.recent_rounds,
-            "current_match": self.current_match,
-            "total_cooperations": self.total_cooperations,
-            "total_defections": self.total_defections,
-            "mutual_cooperations": self.mutual_cooperations,
-            "mutual_defections": self.mutual_defections,
-            "total_lies": self.total_lies,
-            "last_updated": self.last_updated,
+            "recent_turns": self.recent_turns,
+            "total_pixels_placed": self.total_pixels_placed,
+            "fill_rate": self.fill_rate,
+            "progress_percent": self.progress_percent,
         }
     
     @classmethod
     def from_dict(cls, data: dict) -> "LiveState":
         return cls(
-            generation=data.get("generation", 0),
-            match_number=data.get("match_number", 0),
-            total_matches=data.get("total_matches", 3),
             status=data.get("status", "idle"),
+            generation=data.get("generation", 0),
+            turn=data.get("turn", 0),
+            total_turns=data.get("total_turns", 0),
+            grid_width=data.get("grid_width", 16),
+            grid_height=data.get("grid_height", 16),
+            grid_pixels=data.get("grid_pixels", []),
             leaderboard=data.get("leaderboard", []),
-            recent_matches=data.get("recent_matches", []),
-            recent_rounds=data.get("recent_rounds", []),
-            current_match=data.get("current_match"),
-            total_cooperations=data.get("total_cooperations", 0),
-            total_defections=data.get("total_defections", 0),
-            mutual_cooperations=data.get("mutual_cooperations", 0),
-            mutual_defections=data.get("mutual_defections", 0),
-            total_lies=data.get("total_lies", 0),
-            last_updated=data.get("last_updated", datetime.now().isoformat()),
+            recent_turns=data.get("recent_turns", []),
+            total_pixels_placed=data.get("total_pixels_placed", 0),
+            fill_rate=data.get("fill_rate", 0.0),
         )
-    
-    @property
-    def cooperation_rate(self) -> float:
-        """Calculate overall cooperation rate."""
-        total = self.total_cooperations + self.total_defections
-        if total == 0:
-            return 0.0
-        return self.total_cooperations / total
-    
-    @property
-    def progress_percent(self) -> float:
-        """Calculate tournament progress percentage."""
-        if self.total_matches == 0:
-            return 0.0
-        return (self.match_number / self.total_matches) * 100
-
-
-def add_round_interaction(round_result, match_id: str, a1_desc: str, a2_desc: str) -> None:
-    """Add a round interaction to the live state."""
-    state = read_live_state() or LiveState()
-    
-    interaction = RoundInteraction.from_round_result(round_result, match_id, a1_desc, a2_desc)
-    state.recent_rounds.insert(0, interaction.to_dict())
-    state.recent_rounds = state.recent_rounds[:20]  # Keep last 20 rounds
-    
-    # Update lie counter
-    if round_result.agent1_lied:
-        state.total_lies += 1
-    if round_result.agent2_lied:
-        state.total_lies += 1
-    
-    state.last_updated = datetime.now().isoformat()
-    write_live_state(state)
-
-
-def update_live_state(
-    generation: int,
-    match_number: int,
-    total_matches: int,
-    agents: list,
-    match_result: Optional[Any] = None,
-    status: str = "running",
-    current_match_agents: Optional[tuple] = None,
-) -> LiveState:
-    """Update the live state file with current tournament progress."""
-    state = read_live_state() or LiveState()
-    
-    # Update basic info
-    state.generation = generation
-    state.match_number = match_number
-    state.total_matches = total_matches
-    state.status = status
-    state.last_updated = datetime.now().isoformat()
-    
-    # Update leaderboard from agents
-    state.leaderboard = sorted(
-        [LeaderboardEntry.from_agent(a).to_dict() for a in agents],
-        key=lambda x: x["fitness"],
-        reverse=True
-    )
-    
-    # Update current match info
-    if current_match_agents:
-        state.current_match = {
-            "agent1_id": current_match_agents[0].id,
-            "agent2_id": current_match_agents[1].id,
-            "agent1_description": current_match_agents[0].personality.get_short_description(),
-            "agent2_description": current_match_agents[1].personality.get_short_description(),
-        }
-    else:
-        state.current_match = None
-    
-    # Add completed match to recent matches
-    if match_result:
-        summary = MatchSummary.from_match_result(match_result)
-        state.recent_matches.insert(0, summary.to_dict())
-        state.recent_matches = state.recent_matches[:5]
-        
-        # Update aggregate stats
-        for r in match_result.rounds:
-            if r.agent1_move == "COOPERATE":
-                state.total_cooperations += 1
-            else:
-                state.total_defections += 1
-            if r.agent2_move == "COOPERATE":
-                state.total_cooperations += 1
-            else:
-                state.total_defections += 1
-            
-            if r.agent1_move == "COOPERATE" and r.agent2_move == "COOPERATE":
-                state.mutual_cooperations += 1
-            elif r.agent1_move == "DEFECT" and r.agent2_move == "DEFECT":
-                state.mutual_defections += 1
-    
-    write_live_state(state)
-    return state
-
-
-def reset_live_state(generation: int = 0, num_agents: int = 3) -> LiveState:
-    """Reset live state for a new generation."""
-    # Calculate total matches for n agents (round-robin)
-    total_matches = (num_agents * (num_agents - 1)) // 2
-    
-    state = LiveState(
-        generation=generation,
-        match_number=0,
-        total_matches=total_matches,
-        status="running",
-        total_cooperations=0,
-        total_defections=0,
-        mutual_cooperations=0,
-        mutual_defections=0,
-        total_lies=0,
-        recent_rounds=[],
-    )
-    write_live_state(state)
-    return state
-
-
-def write_live_state(state: LiveState) -> None:
-    """Write live state to JSON file."""
-    Path(LOGS_DIR).mkdir(exist_ok=True)
-    
-    with open(LIVE_STATE_FILE, "w") as f:
-        json.dump(state.to_dict(), f, indent=2)
 
 
 def read_live_state() -> Optional[LiveState]:
-    """Read live state from JSON file."""
+    """Read the current live state from file."""
+    state_file = Path(LIVE_STATE_FILE)
+    if not state_file.exists():
+        return None
+    
     try:
-        if not os.path.exists(LIVE_STATE_FILE):
-            return None
-        
-        with open(LIVE_STATE_FILE, "r") as f:
+        with open(state_file) as f:
             data = json.load(f)
-        
         return LiveState.from_dict(data)
     except (json.JSONDecodeError, IOError):
         return None
 
 
-def mark_complete() -> None:
-    """Mark the evolution as complete."""
-    state = read_live_state() or LiveState()
-    state.status = "complete"
-    state.last_updated = datetime.now().isoformat()
+def write_live_state(state: LiveState) -> None:
+    """Write the current live state to file."""
+    state_file = Path(LIVE_STATE_FILE)
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(state_file, "w") as f:
+        json.dump(state.to_dict(), f)
+
+
+def reset_live_state(generation: int, grid_width: int = 16, grid_height: int = 16) -> None:
+    """Reset live state for a new generation."""
+    state = LiveState(
+        status="running",
+        generation=generation,
+        turn=0,
+        total_turns=0,
+        grid_width=grid_width,
+        grid_height=grid_height,
+        grid_pixels=[
+            [{"color": "empty", "owner_id": None} for _ in range(grid_width)]
+            for _ in range(grid_height)
+        ],
+    )
+    write_live_state(state)
+
+
+def update_live_state(
+    generation: int,
+    turn: int,
+    total_turns: int,
+    grid: Any,  # Grid object
+    agents: list[Any],  # Agent objects
+    recent_turns: list[dict],
+    status: str = "running",
+) -> None:
+    """Update live state with current simulation state."""
+    # Build grid pixels representation
+    grid_pixels = []
+    for y in range(grid.height):
+        row = []
+        for x in range(grid.width):
+            pixel = grid.get_pixel(x, y)
+            row.append({
+                "color": pixel.color if pixel else "empty",
+                "owner_id": pixel.owner_id if pixel else None,
+            })
+        grid_pixels.append(row)
+    
+    # Build leaderboard
+    leaderboard = []
+    for agent in sorted(agents, key=lambda a: grid.get_territory_count(a.id), reverse=True):
+        leaderboard.append({
+            "agent_id": agent.id,
+            "color": agent.preferred_color,
+            "territory": grid.get_territory_count(agent.id),
+            "pixels_placed": agent.pixels_placed,
+            "pixels_lost": agent.pixels_lost,
+            "personality": agent.personality.get_short_description(),
+            "goal": agent.personality.loose_goal,
+        })
+    
+    # Calculate fill rate
+    total_pixels = grid.width * grid.height
+    filled = total_pixels - grid.get_empty_count()
+    fill_rate = filled / total_pixels if total_pixels > 0 else 0.0
+    
+    state = LiveState(
+        status=status,
+        generation=generation,
+        turn=turn,
+        total_turns=total_turns,
+        grid_width=grid.width,
+        grid_height=grid.height,
+        grid_pixels=grid_pixels,
+        leaderboard=leaderboard,
+        recent_turns=recent_turns[-20:],  # Keep last 20
+        total_pixels_placed=len(grid.history),
+        fill_rate=fill_rate,
+    )
+    
     write_live_state(state)
 
 
 def mark_evolving(generation: int) -> None:
-    """Mark that evolution is happening between generations."""
-    state = read_live_state() or LiveState()
-    state.generation = generation
-    state.status = "evolving"
-    state.last_updated = datetime.now().isoformat()
-    write_live_state(state)
+    """Mark that evolution is in progress."""
+    state = read_live_state()
+    if state:
+        state.status = "evolving"
+        write_live_state(state)
+
+
+def mark_complete() -> None:
+    """Mark simulation as complete."""
+    state = read_live_state()
+    if state:
+        state.status = "complete"
+        write_live_state(state)
