@@ -11,10 +11,40 @@ Autocomplete.sh adds AI-powered command-line suggestions directly to your termin
 
 Use natural language without copying between CoPilot or ChatGPT
 
+## Cross-Platform Support
+
+| Platform | Shell | Status |
+|----------|-------|--------|
+| Linux | Bash | ✅ Full Support |
+| Linux | Zsh | ✅ Full Support |
+| macOS | Zsh (default) | ✅ Full Support |
+| macOS | Bash | ✅ Full Support |
+| Windows | PowerShell | ✅ Full Support |
+| Windows | Git Bash | ✅ Full Support |
+| Windows | WSL | ✅ Full Support |
+
 ## Quick Start
 
+### Linux / macOS
+
 ```bash
+# Using curl
+curl -fsSL https://autocomplete.sh/install.sh | bash
+
+# Or using wget
 wget -qO- https://autocomplete.sh/install.sh | bash
+```
+
+### Windows PowerShell
+
+```powershell
+irm https://autocomplete.sh/install.ps1 | iex
+```
+
+### Windows (Git Bash / WSL)
+
+```bash
+curl -fsSL https://autocomplete.sh/install.sh | bash
 ```
 
 ## Features
@@ -90,23 +120,51 @@ autocomplete usage
 
 ### Local Installation
 
+**Linux/macOS (Bash/Zsh):**
 ```bash
 git clone git@github.com:closedloop-technologies/autocomplete-sh.git
+cd autocomplete-sh
 ln -s $PWD/autocomplete.sh $HOME/.local/bin/autocomplete
 . autocomplete.sh install
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone git@github.com:closedloop-technologies/autocomplete-sh.git
+cd autocomplete-sh
+Copy-Item autocomplete.ps1 -Destination "$env:USERPROFILE\.autocomplete\"
+. .\autocomplete.ps1
+autocomplete install
 ```
 
 We can also install the development version from the local file:
 
 ```bash
-    ./docs/install.sh dev
+# Linux/macOS
+./docs/install.sh dev
+
+# Windows PowerShell
+.\docs\install.ps1 -Dev
 ```
 
 ### Testing
 
+**Linux:**
 ```bash
 sudo apt install bats
-bats tests
+bats tests/
+```
+
+**macOS:**
+```bash
+brew install bats-core
+bats tests/
+```
+
+**Windows (PowerShell):**
+```powershell
+Install-Module -Name Pester -Force
+Invoke-Pester -Path ./tests/test_autocomplete.ps1
 ```
 
 ### Docker Testing
@@ -115,6 +173,12 @@ bats tests
 docker build -t autocomplete-sh .
 docker run --rm -e OPENAI_API_KEY=$OPENAI_API_KEY autocomplete-sh
 ```
+
+### Platform-Specific Notes
+
+- **macOS**: Uses BSD versions of commands (sed, md5, find). The script automatically detects and handles these differences.
+- **Windows PowerShell**: Uses native PowerShell cmdlets. No external dependencies except `jq` (optional, as JSON is handled natively).
+- **Windows Git Bash/WSL**: Uses the bash version, which works the same as Linux.
 
 ## Maintainers
 

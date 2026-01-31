@@ -1,0 +1,237 @@
+name: Cross-Platform Tests
+
+on:
+  push:
+    branches: [ main, master, moreFeatures ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-linux-bash:
+    name: Linux (Bash)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bc bash-completion bats curl
+
+      - name: Verify script syntax
+        run: |
+          bash -n autocomplete.sh
+          echo "Bash syntax check passed"
+
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          additional_files: 'autocomplete.sh'
+
+      - name: Run BATS tests
+        run: |
+          bats tests/test_autocomplete.bats
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  test-linux-zsh:
+    name: Linux (Zsh)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bc zsh curl
+
+      - name: Verify script syntax
+        run: |
+          zsh -n autocomplete.zsh
+          echo "Zsh syntax check passed"
+
+      - name: Run shellcheck on zsh script
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          additional_files: 'autocomplete.zsh'
+        continue-on-error: true  # Zsh-specific syntax may trigger warnings
+
+  test-macos-bash:
+    name: macOS (Bash)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install jq bash-completion bats-core
+
+      - name: Verify script syntax
+        run: |
+          bash -n autocomplete.sh
+          echo "Bash syntax check passed"
+
+      - name: Test BSD compatibility functions
+        run: |
+          # Test that BSD-specific functions work
+          source autocomplete.sh
+          OS=$(_detect_os)
+          echo "Detected OS: $OS"
+          [ "$OS" = "macos" ] || exit 1
+          echo "macOS detection passed"
+
+      - name: Run BATS tests
+        run: |
+          bats tests/test_autocomplete.bats
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        continue-on-error: true  # Allow API-dependent tests to fail
+
+  test-macos-zsh:
+    name: macOS (Zsh - Default Shell)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install jq
+
+      - name: Verify script syntax
+        run: |
+          zsh -n autocomplete.zsh
+          echo "Zsh syntax check passed"
+
+      - name: Test BSD compatibility functions
+        run: |
+          zsh -c '
+            source autocomplete.zsh
+            OS=$(_detect_os)
+            echo "Detected OS: $OS"
+            [[ "$OS" = "macos" ]] || exit 1
+            echo "macOS detection passed"
+          '
+
+  test-windows-powershell:
+    name: Windows (PowerShell)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Pester
+        shell: pwsh
+        run: |
+          Install-Module -Name Pester -Force -SkipPublisherCheck
+          Import-Module Pester
+
+      - name: Verify script syntax
+        shell: pwsh
+        run: |
+          $null = [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD\autocomplete.ps1",
+            [ref]$null,
+            [ref]$errors
+          )
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_ }
+            exit 1
+          }
+          Write-Host "PowerShell syntax check passed"
+
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          $config = New-PesterConfiguration
+          $config.Run.Path = "./tests/test_autocomplete.ps1"
+          $config.Output.Verbosity = "Detailed"
+          $config.Run.Exit = $true
+          Invoke-Pester -Configuration $config
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+
+  test-windows-gitbash:
+    name: Windows (Git Bash)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install jq
+        shell: bash
+        run: |
+          curl -L -o /usr/bin/jq.exe https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe
+          chmod +x /usr/bin/jq.exe
+
+      - name: Verify script syntax
+        shell: bash
+        run: |
+          bash -n autocomplete.sh
+          echo "Bash syntax check passed"
+
+      - name: Test Windows detection
+        shell: bash
+        run: |
+          source autocomplete.sh
+          OS=$(_detect_os)
+          echo "Detected OS: $OS"
+          # On Git Bash, uname -s returns MINGW64_NT-* or similar
+          [[ "$OS" = "windows" ]] || exit 1
+          echo "Windows detection passed"
+
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          format: gcc
+          severity: warning
+
+      - name: Check PowerShell script with PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -SkipPublisherCheck
+          $results = Invoke-ScriptAnalyzer -Path ./autocomplete.ps1 -Severity Warning,Error
+          if ($results) {
+            $results | Format-Table -AutoSize
+            Write-Warning "PSScriptAnalyzer found issues"
+          } else {
+            Write-Host "PSScriptAnalyzer: No issues found"
+          }
+        continue-on-error: true  # Don't fail on warnings
+
+  install-test:
+    name: Installation Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq bash-completion
+
+      - name: Test installation script
+        run: |
+          # Test dev installation
+          chmod +x docs/install.sh
+          ./docs/install.sh dev
+
+      - name: Verify installation
+        run: |
+          # Check if autocomplete is installed
+          [ -f "$HOME/.local/bin/autocomplete.sh" ] || [ -f "/usr/local/bin/autocomplete.sh" ]
+          echo "Installation verified"

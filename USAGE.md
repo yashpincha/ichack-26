@@ -1,28 +1,79 @@
 # Autocomplete.sh Usage
 
+## Cross-Platform Installation
+
+### Linux / macOS
+
+```bash
+# Install using curl
+curl -fsSL https://autocomplete.sh/install.sh | bash
+
+# Or using wget
+wget -qO- https://autocomplete.sh/install.sh | bash
+```
+
+### Windows PowerShell
+
+```powershell
+# Install using PowerShell
+irm https://autocomplete.sh/install.ps1 | iex
+```
+
+### Windows (Git Bash / WSL)
+
+```bash
+# Same as Linux
+curl -fsSL https://autocomplete.sh/install.sh | bash
+```
+
+---
+
+## Basic Commands
+
 1. **Display Help Information**  
 
    ```bash
+   # Linux/macOS/Git Bash
    autocomplete --help
    ```  
+   
+   ```powershell
+   # Windows PowerShell
+   autocomplete --help
+   ```
 
    *Check that the help text is clear and lists all available commands.*
 
 2. **Install the Script**  
 
    ```bash
+   # Linux/macOS/Git Bash
    autocomplete install
    ```  
 
-   *This adds the necessary lines to your ~/.bashrc and sets up the environment.*
+   ```powershell
+   # Windows PowerShell
+   autocomplete install
+   ```
+
+   *This adds the necessary lines to your shell configuration file.*
 
 3. **Reload Your Shell**  
 
    ```bash
+   # Linux (Bash)
    source ~/.bashrc
-   ```  
+   
+   # macOS (Zsh)
+   source ~/.zshrc
+   ```
+   
+   ```powershell
+   # Windows PowerShell
+   . $PROFILE
+   ```
 
-   *Reload your bash configuration to activate Autocomplete.sh.*
+   *Reload your shell configuration to activate Autocomplete.*
 
 4. **Show Current Configuration**  
 
@@ -105,6 +156,68 @@
     *Clean up by removing the configuration, cache, log files, and the bashrc modifications.*
 
 Running these commands sequentially (or in various orders to simulate different user scenarios) will help you put the script through its paces and ensure that all functionality works as expected.
+
+---
+
+## Interactive Mode (Ctrl+Space)
+
+The interactive mode provides a menu-based selection of LLM suggestions.
+
+### Using Interactive Mode
+
+1. **Type your partial command**
+   ```
+   git comm
+   ```
+
+2. **Press Ctrl+Space** to trigger the interactive menu
+
+3. **Navigate suggestions** using arrow keys (↑/↓)
+
+4. **Press Enter** to execute the selected command
+
+5. **Press Esc or 'q'** to cancel
+
+### Explanation Mode
+
+Add `--explain` to your command to see explanations for each suggestion:
+
+```bash
+# Linux/macOS
+git commit --explain <Ctrl+Space>
+
+# Windows PowerShell
+git commit --explain <Ctrl+Space>
+```
+
+---
+
+## Platform-Specific Notes
+
+### Linux (Bash)
+- Tab completion: Press `<TAB><TAB>` for suggestions
+- Interactive mode: Press `Ctrl+Space`
+- Configuration file: `~/.autocomplete/config`
+- Shell config: `~/.bashrc`
+
+### macOS (Zsh)
+- Tab completion: Press `<TAB><TAB>` for suggestions
+- Interactive mode: Press `Ctrl+Space`
+- Configuration file: `~/.autocomplete/config`
+- Shell config: `~/.zshrc`
+- Note: macOS uses BSD versions of commands (sed, find, md5). The script handles these differences automatically.
+
+### Windows (PowerShell)
+- Interactive mode: Press `Ctrl+Space`
+- Configuration file: `%USERPROFILE%\.autocomplete\config`
+- Shell config: `$PROFILE`
+- Note: Tab completion uses PowerShell's native `Register-ArgumentCompleter`
+
+### Windows (Git Bash / WSL)
+- Same as Linux Bash
+- Configuration stored in `~/.autocomplete/config`
+
+---
 
 Absolutely, let's revise the commands and questions to better suit each persona's voice and language:
 

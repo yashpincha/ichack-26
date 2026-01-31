@@ -42,6 +42,66 @@ echo_green() {
 }
 
 ###############################################################################
+#                    Cross-Platform Compatibility Functions                   #
+###############################################################################
+
+# Detect the operating system
+_detect_os() {
+    case "$(uname -s)" in
+        Linux*)  echo "linux" ;;
+        Darwin*) echo "macos" ;;
+        CYGWIN*|MINGW*|MSYS*) echo "windows" ;;
+        *)       echo "unknown" ;;
+    esac
+}
+
+# Portable sed in-place edit (handles BSD vs GNU differences)
+_sed_inplace() {
+    if [[ "$(_detect_os)" == "macos" ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
+# Portable md5 hash (handles md5sum vs md5 differences)
+_md5_hash() {
+    if command -v md5sum &>/dev/null; then
+        md5sum | cut -d ' ' -f 1
+    elif command -v md5 &>/dev/null; then
+        md5 -q
+    else
+        # Fallback using openssl
+        openssl md5 | awk '{print $NF}'
+    fi
+}
+
+# Portable find with time sorting (handles GNU vs BSD find differences)
+_find_cache_files() {
+    local cache_dir="$1"
+    if [[ "$(_detect_os)" == "macos" ]]; then
+        # BSD find doesn't support -printf, use stat instead
+        find "$cache_dir" -maxdepth 1 -type f -name "acsh-*" -exec stat -f '%m %N' {} \; 2>/dev/null | sort -n | awk '{print $2}'
+    else
+        # GNU find with -printf
+        find "$cache_dir" -maxdepth 1 -type f -name "acsh-*" -printf '%T@ %p\n' 2>/dev/null | sort -n | awk '{print $2}'
+    fi
+}
+
+# Portable recent files listing
+_list_recent_files() {
+    local limit="$1"
+    if [[ "$(_detect_os)" == "macos" ]]; then
+        # BSD ls with different options
+        find . -maxdepth 1 -type f -exec stat -f '%m %N' {} \; 2>/dev/null | sort -rn | head -n "$limit" | while read -r _ file; do
+            ls -ld "$file" 2>/dev/null
+        done
+    else
+        find . -maxdepth 1 -type f -exec ls -ld {} + 2>/dev/null | sort -r | head -n "$limit"
+    fi
+}
+
+###############################################################################
 #                     Global Variables & Model Definitions                    #
 ###############################################################################
 
@@ -95,7 +155,7 @@ _get_terminal_info() {
 
 machine_signature() {
     local signature
-    signature=$(echo "$(uname -a)|$$USER" | md5sum | cut -d ' ' -f 1)
+    signature=$(echo "$(uname -a)|$$USER" | _md5_hash)
     echo "$signature"
 }
 
@@ -152,7 +212,7 @@ _get_clean_command_history() {
 
 _get_recent_files() {
     local FILE_LIMIT=${ACSH_MAX_RECENT_FILES:-20}
-    find . -maxdepth 1 -type f -exec ls -ld {} + | sort -r | head -n "$FILE_LIMIT"
+    _list_recent_files "$FILE_LIMIT"
 }
 
 # Rewritten _get_help_message using a heredoc to preserve formatting.
@@ -326,7 +386,7 @@ log_request() {
     local prompt_tokens_int completion_tokens_int
     user_input="$1"
     response_body="$2"
-    user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
+    user_input_hash=$(echo -n "$user_input" | _md5_hash)
 
     if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
         prompt_tokens=$(echo "$response_body" | jq -r '.usage.input_tokens')
@@ -455,7 +515,7 @@ _default_completion() {
 
 list_cache() {
     local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
-    find "$cache_dir" -maxdepth 1 -type f -name "acsh-*" -printf '%T+ %p\n' | sort
+    _find_cache_files "$cache_dir"
 }
 
 _autocompletesh() {
@@ -478,7 +538,7 @@ _autocompletesh() {
             fi
         fi
         user_input="${COMP_LINE:-"$command $current"}"
-        user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
+        user_input_hash=$(echo -n "$user_input" | _md5_hash)
         export ACSH_INPUT="$user_input"
         export ACSH_PROMPT=
         export ACSH_RESPONSE=
@@ -500,7 +560,7 @@ _autocompletesh() {
             if [[ -d "$cache_dir" && "$cache_size" -gt 0 ]]; then
                 echo "$completions" > "$cache_file"
                 while [[ $(list_cache | wc -l) -gt "$cache_size" ]]; do
-                    oldest=$(list_cache | head -n 1 | cut -d ' ' -f 2-)
+                    oldest=$(list_cache | head -n 1)
                     rm "$oldest" || true
                 done
             fi
@@ -638,7 +698,7 @@ set_config() {
         echo_error "Configuration file not found: $config_file. Run autocomplete install."
         return
     fi
-    sed -i "s|^\($key:\).*|\1 $value|" "$config_file"
+    _sed_inplace "s|^\($key:\).*|\1 $value|" "$config_file"
     acsh_load_config
 }
 
@@ -797,8 +857,8 @@ remove_command() {
     fi
     if [ -f "$bashrc_file" ]; then
         if grep -qF "source autocomplete enable" "$bashrc_file"; then
-            sed -i '/# Autocomplete.zsh/d' "$bashrc_file"
-            sed -i '/autocomplete/d' "$bashrc_file"
+            _sed_inplace '/# Autocomplete.zsh/d' "$bashrc_file"
+            _sed_inplace '/autocomplete/d' "$bashrc_file"
             echo "Removed autocomplete.zsh setup from $bashrc_file"
         fi
     fi
@@ -886,8 +946,7 @@ clear_command() {
         local cache_files
         cache_files=$(list_cache)
         if [[ -n "$cache_files" ]]; then
-            while IFS= read -r line; do
-                file=$(echo "$line" | cut -d ' ' -f 2-)
+            while IFS= read -r file; do
                 rm "$file"
                 echo "Removed: $file"
             done <<< "$cache_files"

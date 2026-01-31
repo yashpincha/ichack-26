@@ -12,7 +12,7 @@
     />
     <meta
       property="og:description"
-      content="Autocomplete.sh adds AI-powered command-line suggestions directly to your Bash or Zsh terminal. Just type <TAB><TAB> and it calls an LLM to return the top suggestions for you."
+      content="Autocomplete.sh adds AI-powered command-line suggestions to your terminal. Supports Linux, macOS, and Windows (PowerShell, Git Bash, WSL). Press Tab or Ctrl+Space for LLM-powered suggestions."
     />
     <meta
       property="og:image"
@@ -29,7 +29,7 @@
     />
     <meta
       name="twitter:description"
-      content="Autocomplete.sh adds AI-powered command-line suggestions directly to your Bash or Zsh terminal. Just type <TAB><TAB> and it calls an LLM to return the top suggestions for you."
+      content="Autocomplete.sh adds AI-powered command-line suggestions to your terminal. Supports Linux, macOS, and Windows (PowerShell, Git Bash, WSL). Press Tab or Ctrl+Space for LLM-powered suggestions."
     />
     <meta
       name="twitter:image"
@@ -39,7 +39,7 @@
     <!-- Additional meta tags -->
     <meta
       name="description"
-      content="Autocomplete.sh adds AI-powered command-line suggestions directly to your Bash or Zsh terminal. Just type <TAB><TAB> and it calls an LLM to return the top suggestions for you."
+      content="Autocomplete.sh adds AI-powered command-line suggestions to your terminal. Supports Linux, macOS, and Windows (PowerShell, Git Bash, WSL). Press Tab or Ctrl+Space for LLM-powered suggestions."
     />
     <meta
       name="keywords"
@@ -380,18 +380,26 @@
         <h2 class="text-3xl sm:text-4xl mb-6 terminal-text font-bold">
           Quick Start
         </h2>
-        <div class="terminal-bg p-6 rounded-md">
-          <p class="mb-4">Install Autocomplete.sh with a single command (works with both Bash and Zsh):</p>
+        
+        <!-- Platform Tabs -->
+        <div class="mb-4">
+          <button id="tab-unix" onclick="showInstallTab('unix')" class="px-4 py-2 mr-2 text-green-400 border border-green-400 rounded hover:bg-green-900">Linux / macOS</button>
+          <button id="tab-windows" onclick="showInstallTab('windows')" class="px-4 py-2 text-gray-400 border border-gray-600 rounded hover:bg-gray-800">Windows PowerShell</button>
+        </div>
+
+        <!-- Unix Installation -->
+        <div id="install-unix" class="terminal-bg p-6 rounded-md">
+          <p class="mb-4">Install Autocomplete.sh with a single command (works with Bash and Zsh on Linux/macOS):</p>
           <div class="relative copyable">
             <pre
               class="text-white py-4 rounded overflow-x-auto whitespace-pre text-left"
               id="install-command"
-            ><span class="text-white">$</span> <code class="text-green-400">wget -qO- https://autocomplete.sh/install.sh | bash<span class="blink-cursor"></span></code></pre>
+            ><span class="text-white">$</span> <code class="text-green-400">curl -fsSL https://autocomplete.sh/install.sh | bash<span class="blink-cursor"></span></code></pre>
 
             <button
               id="install-command-button"
               class="hidden sm:flex absolute top-3 right-2 px-2 py-1 text-sm text-white rounded hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-              onclick="copyToClipboard('wget -qO- https://autocomplete.sh/install.sh | bash')"
+              onclick="copyToClipboard('curl -fsSL https://autocomplete.sh/install.sh | bash')"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -407,6 +415,58 @@
             </button>
           </div>
           <p class="mt-4 text-sm text-gray-400">Click code above to copy</p>
+        </div>
+
+        <!-- Windows PowerShell Installation -->
+        <div id="install-windows" class="terminal-bg p-6 rounded-md" style="display: none;">
+          <p class="mb-4">Install Autocomplete.ps1 with a single command in Windows PowerShell:</p>
+          <div class="relative">
+            <pre
+              class="text-white py-4 rounded overflow-x-auto whitespace-pre text-left"
+            ><span class="text-white">PS&gt;</span> <code class="text-green-400">irm https://autocomplete.sh/install.ps1 | iex<span class="blink-cursor"></span></code></pre>
+
+            <button
+              class="hidden sm:flex absolute top-3 right-2 px-2 py-1 text-sm text-white rounded hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+              onclick="copyToClipboard('irm https://autocomplete.sh/install.ps1 | iex')"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                class="h-5 w-5"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" />
+                <path
+                  d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"
+                />
+              </svg>
+            </button>
+          </div>
+          <p class="mt-4 text-sm text-gray-400">Click code above to copy</p>
+          <p class="mt-2 text-sm text-gray-500">Works with Windows PowerShell 5.1+ and PowerShell Core</p>
+        </div>
+
+        <!-- Platform Support Table -->
+        <div class="mt-8 terminal-bg p-6 rounded-md">
+          <h3 class="text-xl font-semibold mb-4 terminal-highlight">Supported Platforms</h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+            <div class="p-3">
+              <span class="text-2xl">🐧</span>
+              <p class="text-sm mt-1">Linux<br/><span class="text-gray-500">Bash / Zsh</span></p>
+            </div>
+            <div class="p-3">
+              <span class="text-2xl">🍎</span>
+              <p class="text-sm mt-1">macOS<br/><span class="text-gray-500">Zsh / Bash</span></p>
+            </div>
+            <div class="p-3">
+              <span class="text-2xl">🪟</span>
+              <p class="text-sm mt-1">Windows<br/><span class="text-gray-500">PowerShell</span></p>
+            </div>
+            <div class="p-3">
+              <span class="text-2xl">💻</span>
+              <p class="text-sm mt-1">WSL / Git Bash<br/><span class="text-gray-500">Bash</span></p>
+            </div>
+          </div>
         </div>
       </section>
       <section id="use-cases" class="mb-24">
@@ -430,7 +490,7 @@
             <h3 class="text-xl font-semibold mb-3 terminal-highlight">
               Shell Users
             </h3>
-            <p>Navigate Bash & Zsh terminals seamlessly</p>
+            <p>Navigate Bash, Zsh & PowerShell terminals seamlessly</p>
           </div>
           <div class="terminal-bg p-6">
             <h3 class="text-xl font-semibold mb-3 terminal-highlight">
@@ -633,10 +693,37 @@
       document.querySelectorAll(".copyable").forEach((block) => {
         block.addEventListener("click", () => {
           copyToClipboard(
-            "wget -qO- https://autocomplete.sh/install.sh | bash"
+            "curl -fsSL https://autocomplete.sh/install.sh | bash"
           );
         });
       });
+
+      // Platform tab switching
+      function showInstallTab(platform) {
+        const unixTab = document.getElementById('tab-unix');
+        const windowsTab = document.getElementById('tab-windows');
+        const unixInstall = document.getElementById('install-unix');
+        const windowsInstall = document.getElementById('install-windows');
+        
+        if (platform === 'unix') {
+          unixTab.className = 'px-4 py-2 mr-2 text-green-400 border border-green-400 rounded hover:bg-green-900';
+          windowsTab.className = 'px-4 py-2 text-gray-400 border border-gray-600 rounded hover:bg-gray-800';
+          unixInstall.style.display = 'block';
+          windowsInstall.style.display = 'none';
+        } else {
+          windowsTab.className = 'px-4 py-2 text-green-400 border border-green-400 rounded hover:bg-green-900';
+          unixTab.className = 'px-4 py-2 mr-2 text-gray-400 border border-gray-600 rounded hover:bg-gray-800';
+          unixInstall.style.display = 'none';
+          windowsInstall.style.display = 'block';
+        }
+      }
+
+      // Auto-detect platform and show appropriate tab
+      (function() {
+        if (navigator.platform.indexOf('Win') > -1) {
+          showInstallTab('windows');
+        }
+      })();
 
       // Intersection Observer for animations
       const observer = new IntersectionObserver(
