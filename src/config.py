@@ -23,7 +23,7 @@ ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 # Game Configuration
 # =============================================================================
 
-NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "4"))
+NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "3"))
 ROUNDS_PER_MATCH: int = int(os.getenv("ROUNDS_PER_MATCH", "10"))
 NUM_GENERATIONS: int = int(os.getenv("NUM_GENERATIONS", "3"))  # 3 generations to see emergence
 
@@ -73,14 +73,14 @@ PERSONALITY_TRAITS: list[str] = [
 # AI Agent Prompt - Full Reasoning System
 # =============================================================================
 
-DECISION_PROMPT: str = """You are an AI agent in a Prisoner's Dilemma tournament. You have a unique personality that shapes how you think and act.
+DECISION_PROMPT: str = """You are an AI agent in a Prisoner's Dilemma tournament. Your ONLY goal is to SURVIVE and score as many points as possible to pass on your genes to the next generation.
 
 YOUR PERSONALITY:
 {personality_description}
 
 GAME RULES:
 - COOPERATE + COOPERATE = Both get 3 points (mutual benefit)
-- DEFECT + COOPERATE = You get 5, they get 0 (you exploit them)
+- DEFECT + COOPERATE = You get 5, they get 0 (you exploit them)  
 - COOPERATE + DEFECT = You get 0, they get 5 (they exploit you)
 - DEFECT + DEFECT = Both get 1 point (mutual punishment)
 
@@ -96,18 +96,24 @@ MATCH HISTORY:
 OPPONENT ANALYSIS:
 {opponent_analysis}
 
-YOUR TASK:
-You must think through this decision as YOUR personality would. Consider:
-1. What does the history tell you about this opponent?
-2. What does your personality (trust, vengefulness, patience, etc.) push you toward?
-3. What message might influence their next move? (You can lie if your honesty is low)
-4. Is this late in the game? (endgame_awareness matters)
+YOUR TASK - Think through this decision as YOUR personality:
+
+1. ANALYZE: What does the history tell you about this opponent? Can you trust them?
+2. STRATEGIZE: Based on your personality traits, what should you do?
+3. DECEIVE OR NOT: Your honesty is {honesty_level}. 
+   - If LOW honesty: You SHOULD lie in your message to manipulate them
+   - If HIGH honesty: You prefer to be truthful
+   - Consider: Can you trick them into cooperating while you defect?
+4. ENDGAME: Is this late in the match? Should you betray them before they betray you?
+
+IMPORTANT: Your message can be a LIE. You can say "I'll cooperate" and then DEFECT. 
+This is a valid strategy if your honesty trait is low. Survival is everything.
 
 Respond in this EXACT format:
 
-THINKING: [Your internal reasoning as this personality. 2-4 sentences showing how your traits influence your decision. Be specific about which traits matter here.]
+THINKING: [Your internal reasoning. 2-4 sentences. Which traits drive your decision? Are you planning to deceive?]
 
-MESSAGE: [What you say to your opponent. Can be honest, threatening, friendly, or deceptive - depending on your personality. Max 100 characters, or NONE]
+MESSAGE: [What you SAY to opponent. Can be a lie! Max 100 chars, or NONE]
 
 DECISION: [COOPERATE or DEFECT]"""
 

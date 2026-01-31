@@ -294,6 +294,7 @@ def build_decision_prompt(
     current_round: int,
     your_score: int,
     their_score: int,
+    honesty_level: float = 0.5,
     opponent_message: Optional[str] = None,
 ) -> str:
     """Build the full decision prompt for an AI agent."""
@@ -333,6 +334,14 @@ def build_decision_prompt(
     else:
         opponent_analysis = NO_ANALYSIS_TEXT
     
+    # Determine honesty level description
+    if honesty_level < 0.33:
+        honesty_desc = "LOW (you are comfortable lying to get ahead)"
+    elif honesty_level < 0.67:
+        honesty_desc = "MEDIUM (you lie when necessary)"
+    else:
+        honesty_desc = "HIGH (you prefer honesty)"
+    
     return DECISION_PROMPT.format(
         personality_description=personality_description,
         current_round=current_round,
@@ -343,6 +352,7 @@ def build_decision_prompt(
         round_history=history_text,
         opponent_message_section=message_section,
         opponent_analysis=opponent_analysis,
+        honesty_level=honesty_desc,
     )
 
 
@@ -366,6 +376,7 @@ async def get_agent_decision(
     current_round: int,
     your_score: int = 0,
     their_score: int = 0,
+    honesty_level: float = 0.5,
     opponent_message: Optional[str] = None,
     client: Optional[LLMClient] = None,
 ) -> LLMResponse:
@@ -381,6 +392,7 @@ async def get_agent_decision(
         current_round=current_round,
         your_score=your_score,
         their_score=their_score,
+        honesty_level=honesty_level,
         opponent_message=opponent_message,
     )
     

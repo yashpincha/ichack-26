@@ -1,7 +1,8 @@
-"""Prisoner's Dilemma game logic with AI reasoning tracking."""
+"""Prisoner's Dilemma game logic with AI reasoning and lie detection."""
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Optional, Callable
 
@@ -10,9 +11,45 @@ from src.config import PAYOFF_MATRIX, ROUNDS_PER_MATCH
 from src.llm import get_agent_decision, LLMClient, LLMResponse
 
 
+# Keywords that indicate a promise to cooperate
+COOPERATION_KEYWORDS = [
+    "cooperate", "cooperating", "cooperation",
+    "trust", "trusting", "work together",
+    "i'll cooperate", "i will cooperate",
+    "let's cooperate", "let's work together",
+    "mutual", "peace", "friendly", "friends",
+    "yes", "agreed", "deal", "okay", "ok",
+]
+
+
+def detect_cooperation_promise(message: Optional[str]) -> bool:
+    """Detect if a message promises cooperation."""
+    if not message:
+        return False
+    
+    message_lower = message.lower()
+    
+    for keyword in COOPERATION_KEYWORDS:
+        if keyword in message_lower:
+            return True
+    
+    return False
+
+
+def detect_lie(message: Optional[str], action: str) -> bool:
+    """Detect if agent lied (promised cooperation but defected)."""
+    if not message:
+        return False
+    
+    promised_coop = detect_cooperation_promise(message)
+    
+    # Lied if they promised to cooperate but defected
+    return promised_coop and action == "DEFECT"
+
+
 @dataclass
 class RoundResult:
-    """Result of a single round with full AI reasoning."""
+    """Result of a single round with full AI reasoning and lie detection."""
     round_number: int
     agent1_id: str
     agent2_id: str
@@ -22,10 +59,14 @@ class RoundResult:
     agent2_score: int
     agent1_message: Optional[str] = None
     agent2_message: Optional[str] = None
-    agent1_thinking: str = ""  # AI's internal reasoning
+    agent1_thinking: str = ""
     agent2_thinking: str = ""
+    # Lie detection
+    agent1_promised_coop: bool = False
+    agent2_promised_coop: bool = False
+    agent1_lied: bool = False
+    agent2_lied: bool = False
     
-    # Legacy alias
     @property
     def agent1_reasoning(self) -> str:
         return self.agent1_thinking
@@ -33,6 +74,18 @@ class RoundResult:
     @property
     def agent2_reasoning(self) -> str:
         return self.agent2_thinking
+    
+    @property
+    def outcome(self) -> str:
+        """Get outcome description."""
+        if self.agent1_move == "COOPERATE" and self.agent2_move == "COOPERATE":
+            return "mutual_cooperation"
+        elif self.agent1_move == "DEFECT" and self.agent2_move == "DEFECT":
+            return "mutual_defection"
+        elif self.agent1_move == "DEFECT":
+            return "agent1_exploited"
+        else:
+            return "agent2_exploited"
     
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -48,6 +101,11 @@ class RoundResult:
             "agent2_message": self.agent2_message,
             "agent1_thinking": self.agent1_thinking,
             "agent2_thinking": self.agent2_thinking,
+            "agent1_promised_coop": self.agent1_promised_coop,
+            "agent2_promised_coop": self.agent2_promised_coop,
+            "agent1_lied": self.agent1_lied,
+            "agent2_lied": self.agent2_lied,
+            "outcome": self.outcome,
         }
 
 
@@ -56,7 +114,7 @@ class MatchResult:
     """Result of a complete match (10 rounds) with personalities."""
     agent1_id: str
     agent2_id: str
-    agent1_description: str = ""  # Short personality description
+    agent1_description: str = ""
     agent2_description: str = ""
     rounds: list[RoundResult] = field(default_factory=list)
     agent1_total_score: int = 0
@@ -75,12 +133,22 @@ class MatchResult:
             return self.agent1_id
         elif self.agent2_total_score > self.agent1_total_score:
             return self.agent2_id
-        return None  # Tie
+        return None
     
     @property
     def is_tie(self) -> bool:
         """Check if match ended in a tie."""
         return self.agent1_total_score == self.agent2_total_score
+    
+    @property
+    def agent1_lies(self) -> int:
+        """Count agent1's lies."""
+        return sum(1 for r in self.rounds if r.agent1_lied)
+    
+    @property
+    def agent2_lies(self) -> int:
+        """Count agent2's lies."""
+        return sum(1 for r in self.rounds if r.agent2_lied)
     
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -93,6 +161,8 @@ class MatchResult:
             "agent2_total_score": self.agent2_total_score,
             "winner_id": self.winner_id,
             "is_tie": self.is_tie,
+            "agent1_lies": self.agent1_lies,
+            "agent2_lies": self.agent2_lies,
             "rounds": [r.to_dict() for r in self.rounds],
         }
 
@@ -182,6 +252,7 @@ async def play_round(
         current_round=round_number,
         your_score=score1,
         their_score=opp_score1,
+        honesty_level=agent1.personality.honesty,
         opponent_message=agent2_last_message,
         client=llm_client,
     )
@@ -194,6 +265,7 @@ async def play_round(
         current_round=round_number,
         your_score=score2,
         their_score=opp_score2,
+        honesty_level=agent2.personality.honesty,
         opponent_message=agent1_last_message,
         client=llm_client,
     )
@@ -203,9 +275,20 @@ async def play_round(
     # Calculate payoffs
     score1, score2 = calculate_payoffs(response1.decision, response2.decision)
     
-    # Record moves for agent statistics
+    # Detect lies
+    agent1_promised = detect_cooperation_promise(response1.message)
+    agent2_promised = detect_cooperation_promise(response2.message)
+    agent1_lied = detect_lie(response1.message, response1.decision)
+    agent2_lied = detect_lie(response2.message, response2.decision)
+    
+    # Record moves and lies for agent statistics
     agent1.record_move(response1.decision)
     agent2.record_move(response2.decision)
+    
+    if agent1_lied:
+        agent1.record_lie()
+    if agent2_lied:
+        agent2.record_lie()
     
     return RoundResult(
         round_number=round_number,
@@ -219,6 +302,10 @@ async def play_round(
         agent2_message=response2.message,
         agent1_thinking=response1.thinking,
         agent2_thinking=response2.thinking,
+        agent1_promised_coop=agent1_promised,
+        agent2_promised_coop=agent2_promised,
+        agent1_lied=agent1_lied,
+        agent2_lied=agent2_lied,
     )
 
 

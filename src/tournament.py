@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional, Callable
 
 from src.agent import Agent
-from src.game import play_match, MatchResult
+from src.game import play_match, play_match_with_callback, MatchResult, RoundResult
 from src.llm import LLMClient, get_llm_client
 
 
@@ -62,6 +62,7 @@ async def run_tournament(
     generation: int,
     llm_client: Optional[LLMClient] = None,
     on_match_complete: Optional[Callable[[MatchResult, int, int], None]] = None,
+    on_round_complete: Optional[Callable[[RoundResult, MatchResult, Agent, Agent], None]] = None,
     max_concurrent: int = 4,
 ) -> TournamentResult:
     """
@@ -72,6 +73,7 @@ async def run_tournament(
         generation: Current generation number
         llm_client: LLM client for agent decisions
         on_match_complete: Callback after each match (match_result, completed, total)
+        on_round_complete: Callback after each round (round_result, match_result, agent1, agent2)
         max_concurrent: Maximum concurrent matchups
     
     Returns:
@@ -96,7 +98,18 @@ async def run_tournament(
     async def run_match_with_semaphore(agent1: Agent, agent2: Agent) -> MatchResult:
         nonlocal completed
         async with semaphore:
-            match_result = await play_match(agent1, agent2, llm_client=llm_client)
+            # Use callback version if we have round callback
+            if on_round_complete:
+                def round_callback(round_result, match_result):
+                    on_round_complete(round_result, match_result, agent1, agent2)
+                match_result = await play_match_with_callback(
+                    agent1, agent2, 
+                    llm_client=llm_client,
+                    on_round_complete=round_callback
+                )
+            else:
+                match_result = await play_match(agent1, agent2, llm_client=llm_client)
+            
             completed += 1
             if on_match_complete:
                 on_match_complete(match_result, completed, total_matchups)

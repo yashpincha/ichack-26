@@ -25,7 +25,7 @@ from src.llm import LLMClient
 from src.config import NUM_AGENTS, NUM_GENERATIONS, LOGS_DIR
 from src.live_state import (
     update_live_state, reset_live_state, mark_complete, mark_evolving,
-    MatchSummary
+    MatchSummary, add_round_interaction
 )
 
 console = Console()
@@ -244,7 +244,7 @@ async def run_evolution(
     for gen in range(num_generations):
         # Reset live state for new generation
         if live:
-            reset_live_state(gen)
+            reset_live_state(gen, num_agents)
             recent_matches = []
         
         if verbose and not live:
@@ -255,10 +255,22 @@ async def run_evolution(
             live_display = None
             match_count = 0
             total_matches = (num_agents * (num_agents - 1)) // 2
+            current_match_id = [""]  # Use list to allow mutation in nested function
+            
+            def on_round_complete_live(round_result, match_result, agent1, agent2):
+                """Called after each round for real-time updates."""
+                # Add round interaction immediately
+                add_round_interaction(
+                    round_result,
+                    current_match_id[0],
+                    agent1.personality.get_short_description(),
+                    agent2.personality.get_short_description()
+                )
             
             def on_match_complete_live(result, completed, total):
                 nonlocal match_count, recent_matches, live_display
                 match_count = completed
+                current_match_id[0] = f"gen{gen}_match{completed + 1}"  # Prep for next match
                 
                 # Create match summary
                 summary = MatchSummary.from_match_result(result)
@@ -285,6 +297,9 @@ async def run_evolution(
                         recent_matches=recent_matches,
                     ))
             
+            # Initialize first match ID
+            current_match_id[0] = f"gen{gen}_match1"
+            
             with Live(
                 build_live_display(gen, 0, total_matches, agents, []),
                 console=console,
@@ -295,6 +310,7 @@ async def run_evolution(
                     generation=gen,
                     llm_client=llm_client,
                     on_match_complete=on_match_complete_live,
+                    on_round_complete=on_round_complete_live,
                 )
                 
                 # Final update

@@ -52,11 +52,12 @@ st.markdown("""
     .thinking-bubble {
         background: rgba(59, 130, 246, 0.1);
         border-left: 4px solid #3b82f6;
-        padding: 16px;
+        padding: 12px 16px;
         border-radius: 0 12px 12px 0;
         margin: 8px 0;
         font-style: italic;
         color: #94a3b8;
+        font-size: 14px;
     }
     
     .status-badge {
@@ -71,34 +72,31 @@ st.markdown("""
     .status-evolving { background: #eab30820; color: #eab308; }
     .status-complete { background: #3b82f620; color: #3b82f6; }
     
-    .big-number {
-        font-size: 48px;
-        font-weight: 700;
-        color: white;
-        line-height: 1;
-    }
-    
-    .label {
-        font-size: 14px;
-        color: #64748b;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .move-cooperate {
-        color: #22c55e;
-        font-weight: bold;
-    }
-    
-    .move-defect {
+    .lie-badge {
+        background: #ef444430;
         color: #ef4444;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
         font-weight: bold;
+        margin-left: 8px;
     }
+    
+    .move-cooperate { color: #22c55e; font-weight: bold; }
+    .move-defect { color: #ef4444; font-weight: bold; }
     
     .divider {
         height: 1px;
         background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.3), transparent);
         margin: 24px 0;
+    }
+    
+    .interaction-card {
+        background: rgba(30, 41, 59, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.15);
+        border-radius: 12px;
+        padding: 16px;
+        margin: 12px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -145,21 +143,19 @@ def main():
     live_state = read_live_state()
     all_data = load_generation_data()
     
-    # Navigation tabs
-    if live_state and live_state.status in ["running", "evolving"]:
-        tab1, tab2, tab3 = st.tabs(["🔴 LIVE", "📊 Results", "🧬 Evolution"])
-        default_tab = 0
-    else:
-        tab1, tab2, tab3 = st.tabs(["🔴 LIVE", "📊 Results", "🧬 Evolution"])
-        default_tab = 1 if all_data else 0
+    # Navigation tabs - 4 tabs now
+    tab1, tab2, tab3, tab4 = st.tabs(["🔴 LIVE", "💬 Interactions", "📊 Results", "🧬 Evolution"])
     
     with tab1:
         show_live_view(live_state)
     
     with tab2:
-        show_results_view(all_data)
+        show_interactions_view(live_state)
     
     with tab3:
+        show_results_view(all_data)
+    
+    with tab4:
         show_evolution_view(all_data)
 
 
@@ -230,7 +226,7 @@ def show_waiting_state():
 
 
 def show_leaderboard(leaderboard: list[dict]):
-    """Clean leaderboard display."""
+    """Clean leaderboard display with lie counts."""
     if not leaderboard:
         st.info("Waiting for first match...")
         return
@@ -239,7 +235,7 @@ def show_leaderboard(leaderboard: list[dict]):
         agent_id = entry.get("agent_id", "?")[:10]
         fitness = entry.get("fitness", 0)
         personality = entry.get("personality_description", "")
-        coop_rate = entry.get("cooperation_rate", 0.5) * 100
+        lies = entry.get("lies_told", 0)
         
         # Rank styling
         if i == 1:
@@ -259,6 +255,8 @@ def show_leaderboard(leaderboard: list[dict]):
             bg = "rgba(239, 68, 68, 0.05)"
             border = "#ef4444"
         
+        lie_badge = f'<span class="lie-badge">🤥 {lies} lies</span>' if lies > 0 else ''
+        
         st.markdown(f"""
         <div style="
             background: {bg};
@@ -274,6 +272,7 @@ def show_leaderboard(leaderboard: list[dict]):
                 <span style="font-size: 20px; margin-right: 12px;">{rank_icon}</span>
                 <span style="color: white; font-weight: 600;">{agent_id}</span>
                 <span style="color: #64748b; font-size: 12px; margin-left: 8px;">{personality}</span>
+                {lie_badge}
             </div>
             <div style="text-align: right;">
                 <span style="color: white; font-weight: 700; font-size: 18px;">{fitness}</span>
@@ -284,7 +283,7 @@ def show_leaderboard(leaderboard: list[dict]):
 
 
 def show_live_stats(live_state: LiveState):
-    """Show live statistics."""
+    """Show live statistics including lies."""
     coop_rate = live_state.cooperation_rate * 100 if live_state.cooperation_rate else 0
     
     # Cooperation gauge
@@ -313,21 +312,25 @@ def show_live_stats(live_state: LiveState):
     st.plotly_chart(fig, use_container_width=True)
     
     # Quick stats
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Mutual Coop", live_state.mutual_cooperations)
     with col2:
         st.metric("Mutual Defect", live_state.mutual_defections)
+    with col3:
+        st.metric("🤥 Total Lies", live_state.total_lies)
 
 
 def show_latest_match(match: dict):
-    """Show the latest match with simple display."""
+    """Show the latest match with lie info."""
     a1_id = match.get("agent1_id", "?")[:10]
     a2_id = match.get("agent2_id", "?")[:10]
     a1_score = match.get("agent1_score", 0)
     a2_score = match.get("agent2_score", 0)
     a1_desc = match.get("agent1_description", "")
     a2_desc = match.get("agent2_description", "")
+    a1_lies = match.get("agent1_lies", 0)
+    a2_lies = match.get("agent2_lies", 0)
     winner = match.get("winner_id")
     
     # Determine winner styling
@@ -343,17 +346,20 @@ def show_latest_match(match: dict):
         a1_style = a2_style = "color: #eab308;"
         result_text = "Draw!"
     
+    a1_lie_badge = f'<span class="lie-badge">🤥 {a1_lies}</span>' if a1_lies > 0 else ''
+    a2_lie_badge = f'<span class="lie-badge">🤥 {a2_lies}</span>' if a2_lies > 0 else ''
+    
     st.markdown(f"""
     <div class="agent-card">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="text-align: center; flex: 1;">
-                <div style="{a1_style} font-size: 24px;">{a1_id}</div>
+                <div style="{a1_style} font-size: 24px;">{a1_id} {a1_lie_badge}</div>
                 <div style="color: #64748b; font-size: 12px;">{a1_desc}</div>
                 <div style="font-size: 36px; color: white; margin-top: 8px;">{a1_score}</div>
             </div>
             <div style="color: #64748b; font-size: 24px; padding: 0 20px;">vs</div>
             <div style="text-align: center; flex: 1;">
-                <div style="{a2_style} font-size: 24px;">{a2_id}</div>
+                <div style="{a2_style} font-size: 24px;">{a2_id} {a2_lie_badge}</div>
                 <div style="color: #64748b; font-size: 12px;">{a2_desc}</div>
                 <div style="font-size: 36px; color: white; margin-top: 8px;">{a2_score}</div>
             </div>
@@ -366,11 +372,142 @@ def show_latest_match(match: dict):
 
 
 # =============================================================================
+# INTERACTIONS VIEW - NEW!
+# =============================================================================
+
+def show_interactions_view(live_state: Optional[LiveState]):
+    """Show all AI interactions with thinking and lies."""
+    st.markdown("### 💬 Agent Interactions")
+    st.markdown("<p style='color: #64748b;'>Watch the AI agents think, negotiate, and deceive each other in real-time.</p>", unsafe_allow_html=True)
+    
+    if not live_state or not live_state.recent_rounds:
+        st.markdown("""
+        <div style="text-align: center; padding: 60px 20px;">
+            <div style="font-size: 64px; margin-bottom: 20px;">💭</div>
+            <h2 style="color: white;">No Interactions Yet</h2>
+            <p style="color: #64748b;">Start a tournament to see agent interactions here.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Auto-refresh if tournament is running
+        if live_state and live_state.status in ["running", "evolving"]:
+            time.sleep(2)
+            st.rerun()
+        return
+    
+    # Show recent rounds
+    for round_data in live_state.recent_rounds[:10]:
+        show_interaction_card(round_data)
+    
+    # Auto-refresh more frequently for interactions
+    if live_state.status in ["running", "evolving"]:
+        time.sleep(1)
+        st.rerun()
+
+
+def show_interaction_card(round_data: dict):
+    """Display a single round interaction with full detail."""
+    match_id = round_data.get("match_id", "?")
+    round_num = round_data.get("round_num", "?")
+    
+    a1_id = round_data.get("agent1_id", "?")[:10]
+    a2_id = round_data.get("agent2_id", "?")[:10]
+    a1_desc = round_data.get("agent1_description", "")
+    a2_desc = round_data.get("agent2_description", "")
+    
+    a1_thinking = round_data.get("agent1_thinking", "")
+    a2_thinking = round_data.get("agent2_thinking", "")
+    a1_message = round_data.get("agent1_message") or "None"
+    a2_message = round_data.get("agent2_message") or "None"
+    a1_action = round_data.get("agent1_action", "?")
+    a2_action = round_data.get("agent2_action", "?")
+    a1_score = round_data.get("agent1_score", 0)
+    a2_score = round_data.get("agent2_score", 0)
+    a1_lied = round_data.get("agent1_lied", False)
+    a2_lied = round_data.get("agent2_lied", False)
+    outcome = round_data.get("outcome", "")
+    
+    # Outcome styling
+    if outcome == "mutual_cooperation":
+        outcome_text = "🤝 Mutual Cooperation"
+        outcome_color = "#22c55e"
+    elif outcome == "mutual_defection":
+        outcome_text = "💥 Mutual Defection"
+        outcome_color = "#ef4444"
+    elif outcome == "agent1_exploited":
+        outcome_text = f"🗡️ {a1_id} exploited {a2_id}"
+        outcome_color = "#eab308"
+    else:
+        outcome_text = f"🗡️ {a2_id} exploited {a1_id}"
+        outcome_color = "#eab308"
+    
+    # Action colors
+    a1_color = "#22c55e" if a1_action == "COOPERATE" else "#ef4444"
+    a2_color = "#22c55e" if a2_action == "COOPERATE" else "#ef4444"
+    
+    # Lie badges
+    a1_lie = '<span class="lie-badge">LIE!</span>' if a1_lied else ''
+    a2_lie = '<span class="lie-badge">LIE!</span>' if a2_lied else ''
+    
+    st.markdown(f"""
+    <div class="interaction-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <span style="color: #64748b; font-size: 12px;">Round {round_num}</span>
+            <span style="color: {outcome_color}; font-size: 14px;">{outcome_text} ({a1_score} - {a2_score})</span>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <!-- Agent 1 -->
+            <div>
+                <div style="color: white; font-weight: 600; margin-bottom: 4px;">
+                    {a1_id} <span style="color: #64748b; font-weight: normal;">({a1_desc})</span>
+                </div>
+                <div class="thinking-bubble">
+                    💭 "{a1_thinking[:150]}{'...' if len(a1_thinking) > 150 else ''}"
+                </div>
+                <div style="color: #64748b; font-size: 13px; margin: 8px 0;">
+                    💬 "{a1_message}" {a1_lie}
+                </div>
+                <div style="color: {a1_color}; font-weight: bold;">
+                    → {a1_action}
+                </div>
+            </div>
+            
+            <!-- Agent 2 -->
+            <div>
+                <div style="color: white; font-weight: 600; margin-bottom: 4px;">
+                    {a2_id} <span style="color: #64748b; font-weight: normal;">({a2_desc})</span>
+                </div>
+                <div class="thinking-bubble">
+                    💭 "{a2_thinking[:150]}{'...' if len(a2_thinking) > 150 else ''}"
+                </div>
+                <div style="color: #64748b; font-size: 13px; margin: 8px 0;">
+                    💬 "{a2_message}" {a2_lie}
+                </div>
+                <div style="color: {a2_color}; font-weight: bold;">
+                    → {a2_action}
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
 # RESULTS VIEW
 # =============================================================================
 
 def show_results_view(all_data: list[dict]):
     """Show tournament results."""
+    live_state = read_live_state()
+    
+    # Auto-refresh if tournament is running
+    if live_state and live_state.status in ["running", "evolving"]:
+        # Reload data to get latest
+        all_data = load_generation_data()
+        time.sleep(3)
+        st.rerun()
+    
     if not all_data:
         st.markdown("""
         <div style="text-align: center; padding: 60px 20px;">
@@ -418,7 +555,7 @@ def show_results_view(all_data: list[dict]):
         rank = rank_info.get("rank", "?")
         fitness = rank_info.get("fitness", 0)
         coop_rate = rank_info.get("cooperation_rate", 0.5) * 100
-        personality = agent.get("short_description", agent.get("personality", {}).get("trust", ""))
+        personality = agent.get("short_description", "")
         
         # Get key personality traits
         p = agent.get("personality", agent.get("dna", {}))
@@ -454,6 +591,14 @@ def show_results_view(all_data: list[dict]):
 
 def show_evolution_view(all_data: list[dict]):
     """Show how personalities evolved."""
+    live_state = read_live_state()
+    
+    # Auto-refresh if tournament is running
+    if live_state and live_state.status in ["running", "evolving"]:
+        all_data = load_generation_data()
+        time.sleep(3)
+        st.rerun()
+    
     if len(all_data) < 2:
         st.markdown("""
         <div style="text-align: center; padding: 60px 20px;">
@@ -557,6 +702,8 @@ def show_evolution_view(all_data: list[dict]):
         strategy_desc.append("trusting of others")
     if "Honesty" in high_traits:
         strategy_desc.append("honest in communication")
+    if "Honesty" in low_traits:
+        strategy_desc.append("willing to deceive")
     if "Trust" in low_traits:
         strategy_desc.append("suspicious of others")
     if "Patience" in high_traits:
