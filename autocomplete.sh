@@ -1124,14 +1124,18 @@ _interactive_completion_menu() {
     show_menu() {
         for i in "${!options[@]}"; do
             if [[ $i -eq $selected ]]; then
-                echo -e "  \e[1;32m▶ \e[1;97m${options[i]}\e[0m"
+                # Selected: bold green command
+                echo -e "  \e[1;32m▶ ${options[i]}\e[0m"
                 if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
-                    echo -e "    \e[2;37m${explanations[i]}\e[0m"
+                    # Explanation: light grey (same as deselected)
+                    echo -e "    \e[37m${explanations[i]}\e[0m"
                 fi
             else
-                echo -e "    \e[90m${options[i]}\e[0m"
+                # Deselected: green command
+                echo -e "    \e[32m${options[i]}\e[0m"
                 if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
-                    echo -e "    \e[2;90m${explanations[i]}\e[0m"
+                    # Explanation: light grey
+                    echo -e "    \e[37m${explanations[i]}\e[0m"
                 fi
             fi
             # Add blank line between options (except after the last one, and only if showing explanations)
