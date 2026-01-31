@@ -60,6 +60,7 @@ def crossover(parent1: Agent, parent2: Agent) -> Agent:
     
     Uses uniform crossover with occasional trait blending.
     Also handles color preference inheritance.
+    Shape assignment is inherited from a random parent (shapes are assigned at start).
     
     Args:
         parent1: First parent agent
@@ -100,15 +101,13 @@ def crossover(parent1: Agent, parent2: Agent) -> Agent:
         # 10% random new color
         child_traits["preferred_color"] = random.choice(COLORS)
     
-    # Inherit loose goal from one parent (or mutate)
-    if random.random() < 0.7:
-        child_traits["loose_goal"] = random.choice([
-            traits1.get("loose_goal"),
-            traits2.get("loose_goal"),
-        ])
-    else:
-        from src.agent import LOOSE_GOALS
-        child_traits["loose_goal"] = random.choice(LOOSE_GOALS)
+    # Inherit shape from one parent (shapes are assigned positions, so inherit together)
+    chosen_parent = random.choice([traits1, traits2])
+    child_traits["assigned_shape"] = chosen_parent.get("assigned_shape", "heart")
+    child_traits["shape_position"] = chosen_parent.get("shape_position", [0, 0])
+    
+    # No longer using loose_goal in shape battle mode
+    child_traits["loose_goal"] = None
     
     return Agent(
         id=f"agent_{uuid.uuid4().hex[:8]}",
@@ -121,6 +120,9 @@ def crossover(parent1: Agent, parent2: Agent) -> Agent:
 def mutate(agent: Agent, rate: float = MUTATION_RATE) -> Agent:
     """
     Randomly mutate agent personality traits.
+    
+    Note: Shape assignment (assigned_shape, shape_position) is NOT mutated
+    since shapes are assigned at the start and define the agent's goal.
     
     Args:
         agent: Agent to mutate (modified in place)
@@ -144,10 +146,8 @@ def mutate(agent: Agent, rate: float = MUTATION_RATE) -> Agent:
     if random.random() < rate * 0.5:  # Half rate for color
         traits["preferred_color"] = random.choice(COLORS)
     
-    # Small chance to mutate goal
-    if random.random() < rate * 0.3:  # Lower rate for goal
-        from src.agent import LOOSE_GOALS
-        traits["loose_goal"] = random.choice(LOOSE_GOALS)
+    # Shape assignment (assigned_shape, shape_position) is NOT mutated
+    # These define the agent's objective and should remain constant
     
     # Update agent's personality
     agent.personality = AgentPersonality.from_dict(traits)
@@ -226,7 +226,7 @@ def calculate_trait_statistics(agents: list[Agent]) -> dict:
     """
     Calculate statistics for each personality trait across the population.
     
-    Returns dict with mean, std, min, max for each trait.
+    Returns dict with mean, std, min, max for each trait, plus color and shape distributions.
     """
     stats = {}
     
@@ -249,9 +249,13 @@ def calculate_trait_statistics(agents: list[Agent]) -> dict:
             "max": max(values),
         }
     
-    # Also track color distribution
+    # Track color distribution
     color_counts = Counter(a.preferred_color for a in agents)
     stats["color_distribution"] = dict(color_counts)
+    
+    # Track shape distribution
+    shape_counts = Counter(a.assigned_shape for a in agents)
+    stats["shape_distribution"] = dict(shape_counts)
     
     return stats
 

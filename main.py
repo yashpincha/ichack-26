@@ -20,9 +20,16 @@ from rich import print as rprint
 
 from src.agent import Agent, create_initial_population
 from src.grid import Grid, create_grid, COLOR_ASCII
-from src.simulation import run_generation, GenerationResult, get_generation_statistics, TurnResult
+from src.simulation import (
+    run_generation,
+    GenerationResult,
+    get_generation_statistics,
+    TurnResult,
+    get_agent_shape_pixels,
+)
 from src.evolution import evolve_generation, calculate_trait_statistics
 from src.llm import LLMClient
+from src.shapes import shape_to_ascii, get_shape_pixel_count
 from src.config import (
     NUM_AGENTS,
     NUM_GENERATIONS,
@@ -31,6 +38,12 @@ from src.config import (
     GRID_HEIGHT,
     LOGS_DIR,
     COLOR_HEX,
+)
+from src.live_state import (
+    update_live_state,
+    reset_live_state,
+    mark_complete,
+    mark_evolving,
 )
 
 console = Console()
@@ -74,35 +87,60 @@ def display_generation_summary(
     agents: list[Agent],
     result: GenerationResult,
 ) -> None:
-    """Display a rich summary of the generation results."""
+    """Display a rich summary of the generation results (Shape Battle mode)."""
     stats = get_generation_statistics(result, agents)
     
     # Create rankings table
-    table = Table(title=f"Generation {generation} Results", show_header=True)
+    table = Table(title=f"Generation {generation} - Shape Battle Results", show_header=True)
     table.add_column("Rank", style="cyan", justify="right")
-    table.add_column("Agent ID", style="magenta")
+    table.add_column("Agent", style="magenta")
+    table.add_column("Shape", justify="center")
     table.add_column("Color", justify="center")
-    table.add_column("Fitness", style="green", justify="right")
-    table.add_column("Territory", style="yellow", justify="right")
-    table.add_column("Survival", style="blue", justify="right")
+    table.add_column("Completion", style="green", justify="right")
+    table.add_column("Fitness", style="yellow", justify="right")
     table.add_column("Personality", style="dim")
     
     for ranking in stats.get("agent_rankings", []):
         # Color indicator
         color = ranking.get("color", "red")
         color_char = COLOR_ASCII.get(color, "?")
+        shape = ranking.get("shape", "?")
+        
+        # Get shape completion
+        shape_comp = ranking.get("shape_completion", {})
+        completion_pct = shape_comp.get("percentage", 0)
+        completed = shape_comp.get("completed", 0)
+        total = shape_comp.get("total", 0)
+        
+        # Winner indicator
+        rank_str = str(ranking["rank"])
+        if ranking["rank"] == 1:
+            rank_str = "🏆 1"
         
         table.add_row(
-            str(ranking["rank"]),
-            ranking["agent_id"][:12],
+            rank_str,
+            ranking["agent_id"][:10],
+            shape,
             f"[{color}]{color_char}[/{color}]",
+            f"{completion_pct:.0f}% ({completed}/{total})",
             str(ranking["fitness"]),
-            str(ranking["territory"]),
-            f"{ranking['survival_rate']:.0%}",
             ranking["personality"],
         )
     
     console.print(table)
+    
+    # Show winner announcement
+    winner = stats.get("winner")
+    if winner:
+        winner_shape = winner.get("shape", "?")
+        winner_comp = winner.get("shape_completion", {}).get("percentage", 0)
+        console.print(Panel(
+            f"[bold green]🏆 Winner: {winner['agent_id'][:10]}[/bold green]\n"
+            f"Shape: [bold]{winner_shape}[/bold] - {winner_comp:.0f}% complete\n"
+            f"Color: [{winner['color']}]{winner['color']}[/{winner['color']}]",
+            title="Battle Result",
+            border_style="green",
+        ))
     
     # Show grid state
     if result.final_grid:
@@ -134,7 +172,7 @@ def build_live_display(
     agents: list[Agent],
     recent_turns: list[TurnResult],
 ) -> Panel:
-    """Build the live display panel for simulation progress."""
+    """Build the live display panel for Shape Battle simulation."""
     # Header with progress
     progress_pct = (turn / total_turns * 100) if total_turns > 0 else 0
     progress_bar = "█" * int(progress_pct / 5) + "░" * (20 - int(progress_pct / 5))
@@ -148,38 +186,61 @@ def build_live_display(
     grid_text.append("\n\nCanvas:\n", style="bold")
     grid_text.append(grid.to_compact_ascii())
     
-    # Leaderboard section
+    # Shape Battle Leaderboard (sorted by shape completion)
     leaderboard = Text()
-    leaderboard.append("\n\nLeaderboard:\n", style="bold")
-    sorted_agents = sorted(agents, key=lambda a: grid.get_territory_count(a.id), reverse=True)
-    for i, agent in enumerate(sorted_agents[:4], 1):
-        territory = grid.get_territory_count(agent.id)
+    leaderboard.append("\n\nShape Battle Leaderboard:\n", style="bold")
+    
+    # Calculate shape completion for each agent
+    agent_completions = []
+    for agent in agents:
+        shape_pixels = get_agent_shape_pixels(agent)
+        completion = grid.get_shape_completion(agent.id, shape_pixels)
+        agent_completions.append({
+            "agent": agent,
+            "completion": completion,
+        })
+    
+    # Sort by completion percentage
+    agent_completions.sort(key=lambda x: x["completion"]["percentage"], reverse=True)
+    
+    for i, entry in enumerate(agent_completions[:4], 1):
+        agent = entry["agent"]
+        completion = entry["completion"]
         color = agent.preferred_color
-        desc = agent.personality.get_short_description()
+        shape = agent.assigned_shape
+        pct = completion["percentage"]
+        completed = completion["completed"]
+        total = completion["total"]
         
         if i == 1:
             style = "bold green"
-        elif i <= 2:
+            rank_icon = "🏆"
+        elif i == 2:
             style = "green"
+            rank_icon = "🥈"
+        elif i == 3:
+            style = "yellow"
+            rank_icon = "🥉"
         else:
             style = "dim"
+            rank_icon = f"{i}."
         
-        leaderboard.append(f"  {i}. ", style="cyan")
-        leaderboard.append(f"{agent.id[:10]:<10}", style=style)
+        leaderboard.append(f"  {rank_icon} ", style="cyan")
+        leaderboard.append(f"{shape[:8]:<8}", style=style)
         leaderboard.append(f" [{color}] ", style=color)
-        leaderboard.append(f"{territory:>3} px ", style=style)
-        leaderboard.append(f"[{desc[:12]}]\n", style="dim italic")
+        leaderboard.append(f"{pct:>5.1f}% ", style=style)
+        leaderboard.append(f"({completed}/{total})\n", style="dim")
     
     # Recent activity
     activity = Text()
     if recent_turns:
         activity.append("\n\nRecent Activity:\n", style="bold")
         for turn_result in recent_turns[-3:]:
-            overwrote_text = ""
+            action = "placed"
             if turn_result.overwrote:
-                overwrote_text = f" (overwrote {turn_result.overwrote[:6]})"
+                action = f"attacked {turn_result.overwrote[:6]}'s"
             activity.append(
-                f"  {turn_result.agent_id[:8]} → ({turn_result.x},{turn_result.y}) {turn_result.color}{overwrote_text}\n",
+                f"  {turn_result.agent_id[:8]} {action} ({turn_result.x},{turn_result.y}) {turn_result.color}\n",
                 style="dim"
             )
     
@@ -188,7 +249,7 @@ def build_live_display(
     
     return Panel(
         content,
-        title="[bold]AI r/place Simulation[/bold]",
+        title="[bold]⚔️ Shape Battle ⚔️[/bold]",
         border_style="blue",
         padding=(0, 1),
     )
@@ -220,32 +281,55 @@ async def run_simulation(
     Returns:
         Tuple of (final_population, generation_results)
     """
-    # Initialize
-    agents = create_initial_population(num_agents)
+    # Initialize with shapes assigned based on grid size
+    agents = create_initial_population(num_agents, grid_width, grid_height)
     llm_client = LLMClient(use_cache=use_cache)
     all_results: list[GenerationResult] = []
     
     if verbose:
         console.print(Panel(
-            f"[bold]AI r/place Simulation[/bold]\n"
+            f"[bold]⚔️ Shape Battle Simulation ⚔️[/bold]\n"
             f"Agents: {num_agents} | Generations: {num_generations}\n"
             f"Grid: {grid_width}x{grid_height} | Turns/Gen: {turns_per_gen}" +
             ("\n[cyan]Live mode enabled[/cyan]" if live else ""),
-            title="Starting Simulation",
+            title="Starting Shape Battle",
             border_style="blue"
         ))
         
-        # Show initial agents
+        # Show agents with their assigned shapes
+        console.print("\n[bold]Combatants:[/bold]")
         for agent in agents:
-            console.print(f"  • {agent.id[:12]} - {agent.preferred_color} - {agent.personality.get_short_description()}")
+            shape_pixels = get_shape_pixel_count(agent.assigned_shape)
+            console.print(
+                f"  • {agent.id[:12]} - "
+                f"[{agent.preferred_color}]{agent.preferred_color}[/{agent.preferred_color}] "
+                f"[bold]{agent.assigned_shape}[/bold] ({shape_pixels} pixels) "
+                f"at ({agent.shape_position[0]},{agent.shape_position[1]})"
+            )
+        console.print()
+    
+    # Reset live state at start
+    reset_live_state(0, grid_width, grid_height)
     
     for gen in range(num_generations):
         # Create fresh grid for each generation
         grid = create_grid(width=grid_width, height=grid_height)
         recent_turns: list[TurnResult] = []
+        recent_turns_dicts: list[dict] = []  # For live state file
         
         if verbose and not live:
             console.print(f"\n[bold cyan]═══ Generation {gen} ═══[/bold cyan]")
+        
+        # Initialize live state for this generation
+        update_live_state(
+            generation=gen,
+            turn=0,
+            total_turns=turns_per_gen,
+            grid=grid,
+            agents=agents,
+            recent_turns=[],
+            status="running",
+        )
         
         if live:
             # Live mode with Rich Live display
@@ -253,8 +337,11 @@ async def run_simulation(
             
             def on_turn_complete(turn_result: TurnResult, completed: int, total: int):
                 recent_turns.append(turn_result)
+                recent_turns_dicts.append(turn_result.to_dict())
                 if len(recent_turns) > 10:
                     recent_turns.pop(0)
+                if len(recent_turns_dicts) > 20:
+                    recent_turns_dicts.pop(0)
             
             with Live(
                 build_live_display(gen, 0, turns_per_gen, grid, agents, []),
@@ -272,6 +359,16 @@ async def run_simulation(
                         live_display.update(build_live_display(
                             gen, current_turn, turns_per_gen, grid, agents, recent_turns
                         ))
+                        # Update live state file for dashboard
+                        update_live_state(
+                            generation=gen,
+                            turn=current_turn,
+                            total_turns=turns_per_gen,
+                            grid=grid,
+                            agents=agents,
+                            recent_turns=recent_turns_dicts,
+                            status="running",
+                        )
                 
                 result = await run_generation(
                     agents=agents,
@@ -286,6 +383,15 @@ async def run_simulation(
                 live_display.update(build_live_display(
                     gen, turns_per_gen, turns_per_gen, grid, agents, recent_turns
                 ))
+                update_live_state(
+                    generation=gen,
+                    turn=turns_per_gen,
+                    total_turns=turns_per_gen,
+                    grid=grid,
+                    agents=agents,
+                    recent_turns=recent_turns_dicts,
+                    status="running",
+                )
         else:
             # Standard progress bar mode
             with Progress(
@@ -302,6 +408,21 @@ async def run_simulation(
                 def on_turn_complete(turn_result: TurnResult, completed: int, total: int):
                     progress.update(task, completed=completed)
                     recent_turns.append(turn_result)
+                    recent_turns_dicts.append(turn_result.to_dict())
+                    if len(recent_turns_dicts) > 20:
+                        recent_turns_dicts.pop(0)
+                    # Update live state every few turns
+                    current_turn = (completed - 1) // num_agents + 1
+                    if completed % num_agents == 0:  # Update at end of each turn
+                        update_live_state(
+                            generation=gen,
+                            turn=current_turn,
+                            total_turns=turns_per_gen,
+                            grid=grid,
+                            agents=agents,
+                            recent_turns=recent_turns_dicts,
+                            status="running",
+                        )
                 
                 result = await run_generation(
                     agents=agents,
@@ -319,6 +440,9 @@ async def run_simulation(
         
         # Evolve (except for last generation)
         if gen < num_generations - 1:
+            # Mark as evolving
+            mark_evolving(gen)
+            
             agents, survivors, offspring = evolve_generation(agents)
             
             if verbose:
@@ -334,6 +458,9 @@ async def run_simulation(
             if verbose:
                 console.print(f"[dim]Saved: {log_file}[/dim]")
     
+    # Mark simulation as complete
+    mark_complete()
+    
     if verbose:
         console.print(Panel(
             "[bold green]Simulation Complete![/bold green]",
@@ -347,19 +474,19 @@ def main():
     """CLI entry point."""
     import typer
     
-    app = typer.Typer(help="AI r/place Simulation - Watch AI agents compete on a shared canvas")
+    app = typer.Typer(help="Shape Battle - Watch AI agents compete to draw shapes on a canvas!")
     
     @app.command()
     def simulate(
         generations: int = typer.Option(NUM_GENERATIONS, "--generations", "-g", help="Number of generations"),
-        agents: int = typer.Option(NUM_AGENTS, "--agents", "-a", help="Number of agents"),
+        agents: int = typer.Option(NUM_AGENTS, "--agents", "-a", help="Number of agents (each gets a unique shape)"),
         grid_size: int = typer.Option(GRID_WIDTH, "--grid-size", "-s", help="Grid width and height"),
         turns: int = typer.Option(TURNS_PER_GENERATION, "--turns", "-t", help="Turns per generation"),
         no_cache: bool = typer.Option(False, "--no-cache", help="Disable LLM response caching"),
         quiet: bool = typer.Option(False, "--quiet", "-q", help="Reduce output verbosity"),
         live: bool = typer.Option(False, "--live", "-l", help="Show live canvas updates"),
     ):
-        """Run the AI r/place simulation."""
+        """Run the Shape Battle simulation - agents compete to draw their assigned shapes!"""
         asyncio.run(run_simulation(
             num_generations=generations,
             num_agents=agents,
@@ -375,7 +502,7 @@ def main():
     def show(
         generation: int = typer.Argument(..., help="Generation number to display"),
     ):
-        """Display details of a specific generation."""
+        """Display details of a specific generation's Shape Battle."""
         log_file = Path(LOGS_DIR) / f"generation_{generation:03d}.json"
         if not log_file.exists():
             console.print(f"[red]Generation log not found: {log_file}[/red]")
@@ -384,29 +511,51 @@ def main():
         with open(log_file) as f:
             data = json.load(f)
         
-        # Display agents
-        table = Table(title=f"Generation {generation} Agents")
+        # Display agents with shape info
+        table = Table(title=f"Generation {generation} - Shape Battle Results")
         table.add_column("ID")
+        table.add_column("Shape")
         table.add_column("Color")
+        table.add_column("Completion")
         table.add_column("Fitness")
-        table.add_column("Territory")
-        table.add_column("Territoriality")
         table.add_column("Aggression")
-        table.add_column("Goal")
+        table.add_column("Territoriality")
+        
+        shape_completion = data.get("statistics", {}).get("shape_completion_by_agent", {})
         
         for agent_data in data["agents"][:8]:
             personality = agent_data.get("personality", {})
+            agent_id = agent_data["id"]
+            
+            # Get shape completion for this agent
+            comp = shape_completion.get(agent_id, {})
+            comp_pct = comp.get("percentage", 0)
+            completed = comp.get("completed", 0)
+            total = comp.get("total", 0)
+            
             table.add_row(
-                agent_data["id"][:12],
+                agent_id[:10],
+                personality.get("assigned_shape", "?"),
                 personality.get("preferred_color", "?"),
+                f"{comp_pct:.0f}% ({completed}/{total})",
                 str(agent_data["fitness"]),
-                str(data["statistics"]["territory_by_agent"].get(agent_data["id"], 0)),
-                f"{personality.get('territoriality', 0.5):.2f}",
-                f"{personality.get('aggression', 0.5):.2f}",
-                personality.get("loose_goal", "None")[:20] if personality.get("loose_goal") else "None",
+                f"{personality.get('aggression', 0.5):.0%}",
+                f"{personality.get('territoriality', 0.5):.0%}",
             )
         
         console.print(table)
+        
+        # Display winner
+        winner = data.get("statistics", {}).get("winner")
+        if winner:
+            winner_comp = winner.get("shape_completion", {})
+            console.print(Panel(
+                f"[bold green]🏆 Winner: {winner['agent_id'][:10]}[/bold green]\n"
+                f"Shape: [bold]{winner.get('shape', '?')}[/bold] - {winner_comp.get('percentage', 0):.0f}% complete\n"
+                f"Color: {winner.get('color', '?')}",
+                title="Battle Result",
+                border_style="green",
+            ))
         
         # Display grid if available
         if "result" in data and data["result"].get("final_grid"):

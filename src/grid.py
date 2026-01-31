@@ -379,6 +379,125 @@ class Grid:
         """Create a deep copy of the grid."""
         return Grid.from_dict(self.to_dict())
     
+    def get_shape_completion(
+        self,
+        agent_id: str,
+        shape_pixels: list[tuple[int, int, str]],
+    ) -> dict:
+        """
+        Calculate how much of an agent's assigned shape is currently on the grid.
+        
+        Args:
+            agent_id: The agent's ID
+            shape_pixels: List of (x, y, color) tuples defining the shape
+        
+        Returns:
+            Dictionary with completion stats:
+            - completed: Number of shape pixels owned by agent
+            - total: Total pixels in the shape
+            - percentage: Completion percentage (0-100)
+            - destroyed: Number of shape pixels overwritten by others
+        """
+        completed = 0
+        destroyed = 0
+        
+        for x, y, color in shape_pixels:
+            if not self.is_valid_position(x, y):
+                continue
+            pixel = self.get_pixel(x, y)
+            if pixel:
+                if pixel.owner_id == agent_id:
+                    completed += 1
+                elif pixel.owner_id is not None and pixel.color != "empty":
+                    # Someone else owns this pixel
+                    destroyed += 1
+        
+        total = len(shape_pixels)
+        percentage = (completed / total * 100) if total > 0 else 0
+        
+        return {
+            "completed": completed,
+            "total": total,
+            "percentage": percentage,
+            "destroyed": destroyed,
+        }
+    
+    def get_shape_pixels_status(
+        self,
+        agent_id: str,
+        shape_pixels: list[tuple[int, int, str]],
+    ) -> dict[str, list[tuple[int, int]]]:
+        """
+        Get categorized lists of shape pixel positions.
+        
+        Returns:
+            Dictionary with:
+            - owned: Pixels the agent owns (part of their shape)
+            - missing: Pixels that are empty (can be filled)
+            - contested: Pixels owned by other agents (need to be recaptured)
+        """
+        owned = []
+        missing = []
+        contested = []
+        
+        for x, y, color in shape_pixels:
+            if not self.is_valid_position(x, y):
+                continue
+            pixel = self.get_pixel(x, y)
+            if pixel:
+                if pixel.owner_id == agent_id:
+                    owned.append((x, y))
+                elif pixel.color == "empty":
+                    missing.append((x, y))
+                else:
+                    contested.append((x, y))
+        
+        return {
+            "owned": owned,
+            "missing": missing,
+            "contested": contested,
+        }
+    
+    def get_next_shape_pixel(
+        self,
+        agent_id: str,
+        shape_pixels: list[tuple[int, int, str]],
+        prefer_contested: bool = False,
+    ) -> Optional[tuple[int, int, str]]:
+        """
+        Get the next recommended pixel to place for completing a shape.
+        
+        Args:
+            agent_id: The agent's ID
+            shape_pixels: List of (x, y, color) tuples defining the shape
+            prefer_contested: If True, prioritize recapturing contested pixels
+        
+        Returns:
+            (x, y, color) tuple for the next pixel, or None if shape is complete
+        """
+        status = self.get_shape_pixels_status(agent_id, shape_pixels)
+        
+        # Create a lookup for colors
+        color_lookup = {(x, y): color for x, y, color in shape_pixels}
+        
+        if prefer_contested and status["contested"]:
+            # Attack! Recapture a contested pixel
+            x, y = status["contested"][0]
+            return (x, y, color_lookup[(x, y)])
+        
+        if status["missing"]:
+            # Fill in an empty spot
+            x, y = status["missing"][0]
+            return (x, y, color_lookup[(x, y)])
+        
+        if status["contested"]:
+            # All non-contested pixels are filled, fight for the rest
+            x, y = status["contested"][0]
+            return (x, y, color_lookup[(x, y)])
+        
+        # Shape is complete!
+        return None
+    
     def __repr__(self) -> str:
         filled = self.width * self.height - self.get_empty_count()
         return f"Grid({self.width}x{self.height}, {filled} filled, turn {self.current_turn})"

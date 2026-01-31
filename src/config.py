@@ -24,8 +24,8 @@ ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 # Grid Configuration
 # =============================================================================
 
-GRID_WIDTH: int = int(os.getenv("GRID_WIDTH", "16"))
-GRID_HEIGHT: int = int(os.getenv("GRID_HEIGHT", "16"))
+GRID_WIDTH: int = int(os.getenv("GRID_WIDTH", "32"))
+GRID_HEIGHT: int = int(os.getenv("GRID_HEIGHT", "32"))
 
 # Available colors for pixels
 COLORS: list[str] = ["red", "blue", "green", "yellow", "purple", "orange", "cyan", "pink"]
@@ -35,8 +35,8 @@ COLORS: list[str] = ["red", "blue", "green", "yellow", "purple", "orange", "cyan
 # =============================================================================
 
 NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "4"))
-TURNS_PER_GENERATION: int = int(os.getenv("TURNS_PER_GENERATION", "50"))
-NUM_GENERATIONS: int = int(os.getenv("NUM_GENERATIONS", "5"))
+TURNS_PER_GENERATION: int = int(os.getenv("TURNS_PER_GENERATION", "100"))
+NUM_GENERATIONS: int = int(os.getenv("NUM_GENERATIONS", "3"))
 
 # =============================================================================
 # Evolution Configuration
@@ -70,10 +70,21 @@ FITNESS_PERSISTENCE_WEIGHT: float = 1.0  # Points per average turn survived
 FITNESS_OVERWRITE_PENALTY: float = 0.0  # Optional penalty for aggression
 
 # =============================================================================
-# AI Agent Prompt for Pixel Decisions
+# AI Agent Prompt for Pixel Decisions (Shape Battle Mode)
 # =============================================================================
 
-PIXEL_DECISION_PROMPT: str = """You are an AI agent in an r/place-style canvas simulation. Your goal is to place pixels strategically based on your personality.
+PIXEL_DECISION_PROMPT: str = """You are an AI agent in a COMPETITIVE canvas battle! Your mission is to draw your assigned shape while other agents try to draw theirs. You can overwrite each other's pixels!
+
+YOUR MISSION: Draw a {shape_name} using {agent_color} pixels!
+
+YOUR TARGET SHAPE (draw this at position {shape_x},{shape_y}):
+{shape_ascii}
+
+YOUR PROGRESS:
+- Shape pixels completed: {shape_completed}/{shape_total} ({shape_percentage:.0f}%)
+- Pixels destroyed by enemies: {shape_destroyed}
+- Missing pixels to fill: {missing_count}
+- Contested pixels to recapture: {contested_count}
 
 YOUR PERSONALITY:
 {personality_description}
@@ -83,35 +94,44 @@ CURRENT CANVAS STATE ({width}x{height} grid):
 
 Legend: . = empty, R = red, B = blue, G = green, Y = yellow, P = purple, O = orange, C = cyan, K = pink
 
-YOUR CURRENT STATUS:
-- Your color: {agent_color}
-- Your territory: {territory_count} pixels
-- Turn: {current_turn} of {total_turns}
+Turn: {current_turn} of {total_turns}
 
 RECENT ACTIVITY:
 {recent_history}
 
-YOUR TASK:
-Based on your personality traits and goals, decide where to place your next pixel.
+YOUR STRATEGY OPTIONS:
+1. BUILD: Place a pixel to complete your shape (fill missing spots)
+2. REPAIR: Recapture a pixel that was stolen by another agent
+3. ATTACK: Destroy another agent's shape pixel (if you're aggressive!)
 
-Think about:
-1. Your territoriality: Should you place near your existing pixels or spread out?
-2. Your aggression: Should you overwrite others' pixels or avoid conflict?
-3. Your exploration: Should you venture to empty/new areas?
-4. Your goal: {goal_text}
+Based on your personality:
+- Aggression {aggression_pct}%: {aggression_hint}
+- Territoriality {territoriality_pct}%: {territoriality_hint}
 
 Respond in this EXACT format:
 
-THINKING: [1-2 sentences explaining your reasoning based on your personality]
+THINKING: [1-2 sentences - what's your strategy this turn?]
 
-PLACE: x,y,color
+PLACE: x,y,{agent_color}
 
-Where x is column (0-{max_x}), y is row (0-{max_y}), and color is one of: {colors}
-If you're loyal to your color, prefer using {agent_color}."""
+Where x is column (0-{max_x}), y is row (0-{max_y}). You MUST use your color: {agent_color}"""
 
-NO_HISTORY_TEXT: str = "No pixels placed yet - this is the start of the generation."
+NO_HISTORY_TEXT: str = "Battle just started - no pixels placed yet!"
 
 HISTORY_ENTRY_TEMPLATE: str = "Turn {turn}: {agent_id} placed {color} at ({x},{y})"
+
+# Personality hints for the prompt
+AGGRESSION_HINTS = {
+    "low": "You prefer building your shape over attacking others",
+    "mid": "You'll attack if someone damages your shape",
+    "high": "You love destroying other agents' shapes!",
+}
+
+TERRITORIALITY_HINTS = {
+    "low": "You don't care much about defending your pixels",
+    "mid": "You'll repair your shape if damaged",
+    "high": "You aggressively defend and repair your shape!",
+}
 
 # =============================================================================
 # Logging Configuration

@@ -122,7 +122,10 @@ def update_live_state(
     recent_turns: list[dict],
     status: str = "running",
 ) -> None:
-    """Update live state with current simulation state."""
+    """Update live state with current simulation state (Shape Battle mode)."""
+    # Import here to avoid circular imports
+    from src.shapes import get_shape_pixels
+    
     # Build grid pixels representation
     grid_pixels = []
     for y in range(grid.height):
@@ -135,18 +138,35 @@ def update_live_state(
             })
         grid_pixels.append(row)
     
-    # Build leaderboard
-    leaderboard = []
-    for agent in sorted(agents, key=lambda a: grid.get_territory_count(a.id), reverse=True):
-        leaderboard.append({
+    # Build leaderboard with shape completion
+    agent_completions = []
+    for agent in agents:
+        # Calculate shape completion
+        shape_pixels = get_shape_pixels(
+            agent.assigned_shape,
+            agent.preferred_color,
+            agent.shape_position[0],
+            agent.shape_position[1],
+        )
+        completion = grid.get_shape_completion(agent.id, shape_pixels)
+        
+        agent_completions.append({
             "agent_id": agent.id,
             "color": agent.preferred_color,
+            "shape": agent.assigned_shape,
+            "shape_completion": completion,
             "territory": grid.get_territory_count(agent.id),
             "pixels_placed": agent.pixels_placed,
             "pixels_lost": agent.pixels_lost,
             "personality": agent.personality.get_short_description(),
-            "goal": agent.personality.loose_goal,
         })
+    
+    # Sort by shape completion percentage (descending)
+    leaderboard = sorted(
+        agent_completions,
+        key=lambda x: x["shape_completion"]["percentage"],
+        reverse=True,
+    )
     
     # Calculate fill rate
     total_pixels = grid.width * grid.height

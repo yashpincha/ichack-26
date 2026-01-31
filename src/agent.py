@@ -89,7 +89,11 @@ class AgentPersonality:
     # Color preference
     preferred_color: str = "red"
     
-    # Optional loose goal
+    # Shape assignment (for competitive shape battle mode)
+    assigned_shape: str = "heart"  # The shape this agent must draw
+    shape_position: tuple[int, int] = (0, 0)  # Where to draw the shape (x, y offset)
+    
+    # Optional loose goal (legacy, now secondary to shape)
     loose_goal: Optional[str] = None
     
     def to_dict(self) -> dict[str, Any]:
@@ -102,12 +106,17 @@ class AgentPersonality:
             "exploration": self.exploration,
             "color_loyalty": self.color_loyalty,
             "preferred_color": self.preferred_color,
+            "assigned_shape": self.assigned_shape,
+            "shape_position": list(self.shape_position),
             "loose_goal": self.loose_goal,
         }
     
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentPersonality":
         """Create personality from dictionary."""
+        shape_pos = data.get("shape_position", [0, 0])
+        if isinstance(shape_pos, list):
+            shape_pos = tuple(shape_pos)
         return cls(
             territoriality=data.get("territoriality", 0.5),
             aggression=data.get("aggression", 0.5),
@@ -116,12 +125,15 @@ class AgentPersonality:
             exploration=data.get("exploration", 0.5),
             color_loyalty=data.get("color_loyalty", 0.5),
             preferred_color=data.get("preferred_color", "red"),
+            assigned_shape=data.get("assigned_shape", "heart"),
+            shape_position=shape_pos,
             loose_goal=data.get("loose_goal"),
         )
     
     @classmethod
-    def random(cls) -> "AgentPersonality":
-        """Create a completely random personality."""
+    def random(cls, assigned_shape: str = "heart", shape_position: tuple[int, int] = (0, 0)) -> "AgentPersonality":
+        """Create a completely random personality with assigned shape."""
+        from src.shapes import SHAPE_NAMES
         return cls(
             territoriality=random.random(),
             aggression=random.random(),
@@ -130,7 +142,9 @@ class AgentPersonality:
             exploration=random.random(),
             color_loyalty=random.random(),
             preferred_color=random.choice(COLORS),
-            loose_goal=random.choice(LOOSE_GOALS),
+            assigned_shape=assigned_shape,
+            shape_position=shape_position,
+            loose_goal=None,  # Shape is now the main goal
         )
     
     def get_prompt_description(self) -> str:
@@ -154,9 +168,7 @@ class AgentPersonality:
             lines.append(f"- {trait_name}: {pct}% ({desc})")
         
         lines.append(f"- Preferred Color: {self.preferred_color}")
-        
-        if self.loose_goal:
-            lines.append(f"- Goal: {self.loose_goal}")
+        lines.append(f"- Assigned Shape: {self.assigned_shape}")
         
         return "\n".join(lines)
     
@@ -254,6 +266,16 @@ class Agent:
         return self.personality.preferred_color
     
     @property
+    def assigned_shape(self) -> str:
+        """Get agent's assigned shape."""
+        return self.personality.assigned_shape
+    
+    @property
+    def shape_position(self) -> tuple[int, int]:
+        """Get agent's shape position."""
+        return self.personality.shape_position
+    
+    @property
     def survival_rate(self) -> float:
         """Calculate what percentage of placed pixels survived."""
         if self.pixels_placed == 0:
@@ -296,6 +318,8 @@ class Agent:
             "pixels_lost": self.pixels_lost,
             "overwrites": self.overwrites,
             "short_description": self.personality.get_short_description(),
+            "assigned_shape": self.assigned_shape,
+            "shape_position": list(self.shape_position),
         }
     
     @classmethod
@@ -315,12 +339,17 @@ class Agent:
         )
     
     @classmethod
-    def create_random(cls, generation: int = 0) -> "Agent":
-        """Create a new agent with completely random personality."""
+    def create_random(
+        cls,
+        generation: int = 0,
+        assigned_shape: str = "heart",
+        shape_position: tuple[int, int] = (0, 0),
+    ) -> "Agent":
+        """Create a new agent with random personality and assigned shape."""
         return cls(
             id=f"agent_{uuid.uuid4().hex[:8]}",
             generation=generation,
-            personality=AgentPersonality.random(),
+            personality=AgentPersonality.random(assigned_shape, shape_position),
         )
     
     @classmethod
@@ -355,13 +384,32 @@ class Agent:
         return (
             f"Agent {self.id} (Gen {self.generation}) - {desc}\n"
             f"  Color: {self.preferred_color}\n"
+            f"  Shape: {self.assigned_shape} at {self.shape_position}\n"
             f"  Fitness: {self.fitness}\n"
             f"  Pixels Placed: {self.pixels_placed}, Lost: {self.pixels_lost}\n"
-            f"  Survival Rate: {self.survival_rate:.1%}\n"
-            f"  Goal: {self.personality.loose_goal or 'None'}"
+            f"  Survival Rate: {self.survival_rate:.1%}"
         )
 
 
-def create_initial_population(num_agents: int = 4) -> list[Agent]:
-    """Create the initial population of completely random agents."""
-    return [Agent.create_random(generation=0) for _ in range(num_agents)]
+def create_initial_population(
+    num_agents: int = 4,
+    grid_width: int = 32,
+    grid_height: int = 32,
+) -> list[Agent]:
+    """Create the initial population with assigned shapes."""
+    from src.shapes import get_shapes_for_agents, calculate_shape_positions
+    
+    # Get shapes and positions for each agent
+    shapes = get_shapes_for_agents(num_agents)
+    positions = calculate_shape_positions(num_agents, grid_width, grid_height, shapes)
+    
+    agents = []
+    for i in range(num_agents):
+        agent = Agent.create_random(
+            generation=0,
+            assigned_shape=shapes[i],
+            shape_position=positions[i],
+        )
+        agents.append(agent)
+    
+    return agents

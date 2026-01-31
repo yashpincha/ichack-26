@@ -175,10 +175,10 @@ def main():
     st.markdown("""
     <div style="text-align: center; padding: 20px 0 40px 0;">
         <h1 style="font-size: 3rem; margin: 0; color: white;">
-            🎨 AI r/place
+            ⚔️ Shape Battle
         </h1>
         <p style="font-size: 1.2rem; color: #64748b; margin-top: 8px;">
-            Watch AI agents compete on a shared pixel canvas
+            Watch AI agents compete to draw their shapes on the canvas!
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -249,34 +249,42 @@ def show_live_view(live_state: Optional[LiveState]):
             st.info("Canvas loading...")
     
     with col2:
-        st.markdown("### 🏆 Leaderboard")
+        st.markdown("### ⚔️ Shape Battle")
         show_leaderboard(live_state.leaderboard)
         
-        st.markdown("### 📊 Stats")
+        st.markdown("### 📊 Battle Stats")
         col_a, col_b = st.columns(2)
         with col_a:
-            st.metric("Fill Rate", f"{live_state.fill_rate:.0%}")
+            st.metric("Canvas Fill", f"{live_state.fill_rate:.0%}")
         with col_b:
-            st.metric("Placements", live_state.total_pixels_placed)
+            st.metric("Total Moves", live_state.total_pixels_placed)
     
     # Recent activity
     if live_state.recent_turns:
         st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-        st.markdown("### 📝 Recent Activity")
+        st.markdown("### ⚡ Battle Log")
         for turn in live_state.recent_turns[-5:]:
             agent_id = turn.get("agent_id", "?")[:8]
             color = turn.get("color", "?")
             x, y = turn.get("x", 0), turn.get("y", 0)
-            thinking = turn.get("thinking", "")[:50]
+            thinking = turn.get("thinking", "")[:60]
             overwrote = turn.get("overwrote")
             
-            overwrote_text = f" (overwrote {overwrote[:6]})" if overwrote else ""
+            if overwrote:
+                action = "⚔️ ATTACKED"
+                action_color = "#ef4444"
+                target_text = f"(destroyed {overwrote[:6]}'s pixel)"
+            else:
+                action = "🔨 BUILD"
+                action_color = "#22c55e"
+                target_text = ""
+            
             st.markdown(f"""
             <div style="background: rgba(30, 41, 59, 0.5); padding: 8px 12px; border-radius: 8px; margin: 4px 0; border-left: 3px solid {COLOR_HEX.get(color, '#666')};">
-                <span style="color: white; font-weight: 600;">{agent_id}</span>
-                <span style="color: #64748b;"> → ({x},{y}) </span>
-                <span style="color: {COLOR_HEX.get(color, '#666')};">{color}</span>
-                <span style="color: #ef4444;">{overwrote_text}</span>
+                <span style="color: {action_color}; font-weight: 600;">{action}</span>
+                <span style="color: white; margin: 0 8px;">{agent_id}</span>
+                <span style="color: #64748b;">→ ({x},{y})</span>
+                <span style="color: #ef4444; font-size: 12px; margin-left: 8px;">{target_text}</span>
                 <div style="color: #64748b; font-size: 12px; font-style: italic; margin-top: 4px;">{thinking}...</div>
             </div>
             """, unsafe_allow_html=True)
@@ -286,20 +294,20 @@ def show_waiting_state():
     """Show when no simulation is running."""
     st.markdown("""
     <div style="text-align: center; padding: 60px 20px;">
-        <div style="font-size: 64px; margin-bottom: 20px;">⏳</div>
-        <h2 style="color: white; margin-bottom: 16px;">No Simulation Running</h2>
+        <div style="font-size: 64px; margin-bottom: 20px;">⚔️</div>
+        <h2 style="color: white; margin-bottom: 16px;">No Battle Running</h2>
         <p style="color: #64748b; max-width: 400px; margin: 0 auto 24px auto;">
-            Start a simulation to watch AI agents compete on the canvas.
+            Start a Shape Battle to watch AI agents compete to draw their shapes!
         </p>
         <code style="background: #1e293b; padding: 12px 20px; border-radius: 8px; color: #22c55e;">
-            python main.py simulate --generations 5 --live
+            python main.py simulate --live
         </code>
     </div>
     """, unsafe_allow_html=True)
 
 
 def show_leaderboard(leaderboard: list[dict]):
-    """Display agent leaderboard."""
+    """Display agent leaderboard with shape completion."""
     if not leaderboard:
         st.info("Waiting for data...")
         return
@@ -309,9 +317,12 @@ def show_leaderboard(leaderboard: list[dict]):
         color = entry.get("color", "red")
         territory = entry.get("territory", 0)
         personality = entry.get("personality", "")
+        shape = entry.get("shape", "?")
+        shape_completion = entry.get("shape_completion", {})
+        completion_pct = shape_completion.get("percentage", 0) if shape_completion else 0
         
         if i == 1:
-            rank_icon = "🥇"
+            rank_icon = "🏆"
             bg = "rgba(34, 197, 94, 0.1)"
             border = "#22c55e"
         elif i == 2:
@@ -328,16 +339,21 @@ def show_leaderboard(leaderboard: list[dict]):
             border = "#ef4444"
         
         st.markdown(f"""
-        <div style="background: {bg}; border-left: 3px solid {border}; padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <span style="font-size: 20px; margin-right: 8px;">{rank_icon}</span>
-                <span style="color: white; font-weight: 600;">{agent_id}</span>
-                <span style="color: {COLOR_HEX.get(color, '#666')}; margin-left: 8px;">●</span>
-                <span style="color: #64748b; font-size: 12px; margin-left: 8px;">{personality}</span>
+        <div style="background: {bg}; border-left: 3px solid {border}; padding: 12px 16px; margin: 8px 0; border-radius: 0 8px 8px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 20px; margin-right: 8px;">{rank_icon}</span>
+                    <span style="color: white; font-weight: 600;">{shape}</span>
+                    <span style="color: {COLOR_HEX.get(color, '#666')}; margin-left: 8px;">●</span>
+                </div>
+                <div style="text-align: right;">
+                    <span style="color: white; font-weight: 700; font-size: 18px;">{completion_pct:.0f}%</span>
+                </div>
             </div>
-            <div style="text-align: right;">
-                <span style="color: white; font-weight: 700; font-size: 18px;">{territory}</span>
-                <span style="color: #64748b; font-size: 12px;"> px</span>
+            <div style="margin-top: 6px;">
+                <div style="background: rgba(255,255,255,0.1); border-radius: 4px; height: 6px; overflow: hidden;">
+                    <div style="background: {COLOR_HEX.get(color, '#666')}; width: {completion_pct}%; height: 100%;"></div>
+                </div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -348,13 +364,13 @@ def show_leaderboard(leaderboard: list[dict]):
 # =============================================================================
 
 def show_results_view(all_data: list[dict]):
-    """Show simulation results."""
+    """Show Shape Battle results."""
     if not all_data:
         st.markdown("""
         <div style="text-align: center; padding: 60px 20px;">
-            <div style="font-size: 64px; margin-bottom: 20px;">📊</div>
-            <h2 style="color: white;">No Results Yet</h2>
-            <p style="color: #64748b;">Run a simulation to see results here.</p>
+            <div style="font-size: 64px; margin-bottom: 20px;">⚔️</div>
+            <h2 style="color: white;">No Battle Results Yet</h2>
+            <p style="color: #64748b;">Run a Shape Battle simulation to see results here.</p>
         </div>
         """, unsafe_allow_html=True)
         return
@@ -380,46 +396,68 @@ def show_results_view(all_data: list[dict]):
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            st.markdown("### Final Canvas")
-            fig = create_grid_figure(grid_pixels, grid_data.get("width", 16), grid_data.get("height", 16))
+            st.markdown("### Battle Canvas")
+            fig = create_grid_figure(grid_pixels, grid_data.get("width", 32), grid_data.get("height", 32))
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.markdown("### Winner")
+            st.markdown("### 🏆 Winner")
             rankings = gen_data.get("statistics", {}).get("agent_rankings", [])
             if rankings:
                 winner = rankings[0]
+                shape = winner.get("shape", "?")
+                shape_comp = winner.get("shape_completion", {})
+                completion_pct = shape_comp.get("percentage", 0) if shape_comp else 0
+                completed = shape_comp.get("completed", 0) if shape_comp else 0
+                total = shape_comp.get("total", 0) if shape_comp else 0
+                
                 st.markdown(f"""
                 <div class="agent-card" style="text-align: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));">
                     <div style="font-size: 48px;">🏆</div>
-                    <h2 style="color: #22c55e; margin: 12px 0 4px 0;">{winner.get('agent_id', '?')[:12]}</h2>
+                    <h2 style="color: #22c55e; margin: 12px 0 4px 0; text-transform: capitalize;">{shape}</h2>
                     <div style="color: {COLOR_HEX.get(winner.get('color', 'red'), '#666')}; font-size: 24px;">●</div>
-                    <div style="color: #64748b; margin: 8px 0;">{winner.get('personality', '')}</div>
-                    <div style="font-size: 24px; color: white;">{winner.get('territory', 0)} pixels</div>
-                    <div style="font-size: 18px; color: #22c55e;">Fitness: {winner.get('fitness', 0)}</div>
+                    <div style="font-size: 32px; color: white; margin: 12px 0;">{completion_pct:.0f}%</div>
+                    <div style="color: #64748b; font-size: 14px;">{completed}/{total} pixels</div>
+                    <div style="background: rgba(255,255,255,0.1); border-radius: 4px; height: 8px; margin: 12px 0; overflow: hidden;">
+                        <div style="background: #22c55e; width: {completion_pct}%; height: 100%;"></div>
+                    </div>
+                    <div style="color: #64748b; font-size: 12px;">{winner.get('agent_id', '?')[:12]}</div>
                 </div>
                 """, unsafe_allow_html=True)
     
     # All agents table
     st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-    st.markdown("### All Agents")
+    st.markdown("### Battle Standings")
     
     rankings = gen_data.get("statistics", {}).get("agent_rankings", [])
     for ranking in rankings:
         color = ranking.get("color", "red")
+        shape = ranking.get("shape", "?")
+        shape_comp = ranking.get("shape_completion", {})
+        completion_pct = shape_comp.get("percentage", 0) if shape_comp else 0
+        completed = shape_comp.get("completed", 0) if shape_comp else 0
+        total = shape_comp.get("total", 0) if shape_comp else 0
+        
+        rank = ranking.get("rank", "?")
+        rank_icon = "🏆" if rank == 1 else f"#{rank}"
+        
         st.markdown(f"""
         <div class="agent-card">
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <span style="font-size: 20px; margin-right: 8px;">#{ranking.get('rank', '?')}</span>
-                    <span style="color: white; font-size: 18px; font-weight: 600;">{ranking.get('agent_id', '?')[:12]}</span>
+                    <span style="font-size: 20px; margin-right: 8px;">{rank_icon}</span>
+                    <span style="color: white; font-size: 18px; font-weight: 600; text-transform: capitalize;">{shape}</span>
                     <span style="color: {COLOR_HEX.get(color, '#666')}; margin-left: 8px; font-size: 20px;">●</span>
-                    <div style="color: #64748b; margin-top: 4px;">{ranking.get('personality', '')}</div>
+                    <div style="color: #64748b; margin-top: 4px; font-size: 12px;">{ranking.get('agent_id', '?')[:12]} - {ranking.get('personality', '')}</div>
                 </div>
                 <div style="text-align: right;">
-                    <div style="color: white; font-size: 24px; font-weight: bold;">{ranking.get('territory', 0)} <span style="font-size: 14px; color: #64748b;">px</span></div>
-                    <div style="color: #64748b; font-size: 14px;">Fitness: {ranking.get('fitness', 0)}</div>
-                    <div style="color: #64748b; font-size: 12px;">Survival: {ranking.get('survival_rate', 0):.0%}</div>
+                    <div style="color: white; font-size: 24px; font-weight: bold;">{completion_pct:.0f}%</div>
+                    <div style="color: #64748b; font-size: 12px;">{completed}/{total} pixels</div>
+                </div>
+            </div>
+            <div style="margin-top: 8px;">
+                <div style="background: rgba(255,255,255,0.1); border-radius: 4px; height: 6px; overflow: hidden;">
+                    <div style="background: {COLOR_HEX.get(color, '#666')}; width: {completion_pct}%; height: 100%;"></div>
                 </div>
             </div>
         </div>

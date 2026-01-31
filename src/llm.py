@@ -24,6 +24,8 @@ from src.config import (
     GRID_WIDTH,
     GRID_HEIGHT,
     TURNS_PER_GENERATION,
+    AGGRESSION_HINTS,
+    TERRITORIALITY_HINTS,
 )
 
 
@@ -266,6 +268,16 @@ def parse_pixel_decision(
     )
 
 
+def get_trait_level(value: float) -> str:
+    """Get trait level from 0-1 value."""
+    if value < 0.33:
+        return "low"
+    elif value < 0.67:
+        return "mid"
+    else:
+        return "high"
+
+
 def build_pixel_prompt(
     agent_id: str,
     personality_description: str,
@@ -277,9 +289,22 @@ def build_pixel_prompt(
     current_turn: int,
     total_turns: int,
     recent_history: list[dict],
+    # Shape battle parameters
+    shape_name: str = "heart",
+    shape_ascii: str = "",
+    shape_x: int = 0,
+    shape_y: int = 0,
+    shape_completed: int = 0,
+    shape_total: int = 0,
+    shape_percentage: float = 0.0,
+    shape_destroyed: int = 0,
+    missing_count: int = 0,
+    contested_count: int = 0,
+    aggression: float = 0.5,
+    territoriality: float = 0.5,
     goal: Optional[str] = None,
 ) -> str:
-    """Build the prompt for pixel placement decision."""
+    """Build the prompt for pixel placement decision (shape battle mode)."""
     
     # Format recent history
     if recent_history:
@@ -296,7 +321,11 @@ def build_pixel_prompt(
     else:
         history_text = NO_HISTORY_TEXT
     
-    goal_text = goal if goal else "maximize your territory and express your personality"
+    # Get personality hints
+    aggression_level = get_trait_level(aggression)
+    territoriality_level = get_trait_level(territoriality)
+    aggression_hint = AGGRESSION_HINTS.get(aggression_level, "")
+    territoriality_hint = TERRITORIALITY_HINTS.get(territoriality_level, "")
     
     return PIXEL_DECISION_PROMPT.format(
         personality_description=personality_description,
@@ -304,14 +333,26 @@ def build_pixel_prompt(
         height=grid_height,
         grid_ascii=grid_ascii,
         agent_color=agent_color,
-        territory_count=territory_count,
         current_turn=current_turn,
         total_turns=total_turns,
         recent_history=history_text,
-        goal_text=goal_text,
         max_x=grid_width - 1,
         max_y=grid_height - 1,
-        colors=", ".join(COLORS),
+        # Shape battle parameters
+        shape_name=shape_name,
+        shape_ascii=shape_ascii,
+        shape_x=shape_x,
+        shape_y=shape_y,
+        shape_completed=shape_completed,
+        shape_total=shape_total,
+        shape_percentage=shape_percentage,
+        shape_destroyed=shape_destroyed,
+        missing_count=missing_count,
+        contested_count=contested_count,
+        aggression_pct=int(aggression * 100),
+        territoriality_pct=int(territoriality * 100),
+        aggression_hint=aggression_hint,
+        territoriality_hint=territoriality_hint,
     )
 
 
@@ -338,12 +379,31 @@ async def get_pixel_decision(
     current_turn: int,
     total_turns: int,
     recent_history: list[dict],
+    # Shape battle parameters
+    shape_name: str = "heart",
+    shape_ascii: str = "",
+    shape_x: int = 0,
+    shape_y: int = 0,
+    shape_completion: Optional[dict] = None,
+    shape_status: Optional[dict] = None,
+    aggression: float = 0.5,
+    territoriality: float = 0.5,
     goal: Optional[str] = None,
     client: Optional[LLMClient] = None,
 ) -> PixelDecision:
-    """Get an AI agent's decision for pixel placement."""
+    """Get an AI agent's decision for pixel placement (shape battle mode)."""
     if client is None:
         client = get_llm_client()
+    
+    # Extract shape completion stats
+    shape_completed = shape_completion.get("completed", 0) if shape_completion else 0
+    shape_total = shape_completion.get("total", 0) if shape_completion else 0
+    shape_percentage = shape_completion.get("percentage", 0) if shape_completion else 0
+    shape_destroyed = shape_completion.get("destroyed", 0) if shape_completion else 0
+    
+    # Extract shape status
+    missing_count = len(shape_status.get("missing", [])) if shape_status else 0
+    contested_count = len(shape_status.get("contested", [])) if shape_status else 0
     
     prompt = build_pixel_prompt(
         agent_id=agent_id,
@@ -356,6 +416,18 @@ async def get_pixel_decision(
         current_turn=current_turn,
         total_turns=total_turns,
         recent_history=recent_history,
+        shape_name=shape_name,
+        shape_ascii=shape_ascii,
+        shape_x=shape_x,
+        shape_y=shape_y,
+        shape_completed=shape_completed,
+        shape_total=shape_total,
+        shape_percentage=shape_percentage,
+        shape_destroyed=shape_destroyed,
+        missing_count=missing_count,
+        contested_count=contested_count,
+        aggression=aggression,
+        territoriality=territoriality,
         goal=goal,
     )
     
