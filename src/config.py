@@ -23,7 +23,7 @@ ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 # Game Configuration
 # =============================================================================
 
-NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "8"))
+NUM_AGENTS: int = int(os.getenv("NUM_AGENTS", "4"))
 ROUNDS_PER_MATCH: int = int(os.getenv("ROUNDS_PER_MATCH", "10"))
 NUM_GENERATIONS: int = int(os.getenv("NUM_GENERATIONS", "3"))  # 3 generations to see emergence
 
@@ -46,7 +46,7 @@ PAYOFF_MATRIX: dict[str, dict[str, tuple[int, int]]] = {
 
 MUTATION_RATE: float = float(os.getenv("MUTATION_RATE", "0.2"))
 MUTATION_SIGMA: float = 0.2  # Standard deviation for Gaussian mutation
-SURVIVORS_PER_GENERATION: int = 4  # Top N agents survive
+SURVIVORS_PER_GENERATION: int = 2  # Top N agents survive (half of population)
 BLENDING_PROBABILITY: float = 0.3  # Probability to blend numeric genes during crossover
 
 # Gene value bounds

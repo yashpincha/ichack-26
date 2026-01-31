@@ -1,75 +1,112 @@
-"""Streamlit dashboard for DarwinLM visualization."""
+"""Clean, demo-ready Streamlit dashboard for DarwinLM."""
 
 from __future__ import annotations
 
 import json
-import asyncio
+import time
 from pathlib import Path
 from typing import Optional
 import streamlit as st
+import plotly.graph_objects as go
 
-# Page config must be first Streamlit command
+# Page config - clean minimal setup
 st.set_page_config(
-    page_title="DarwinLM - Evolutionary PD Tournament",
+    page_title="DarwinLM",
     page_icon="🧬",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 import sys
-import time
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from viz.components import (
-    create_fitness_chart,
-    create_cooperation_rate_chart,
-    create_gene_heatmap,
-    create_agent_card,
-    create_match_viewer,
-    create_strategy_radar,
-    create_lineage_tree,
-    create_live_leaderboard,
-    create_live_match_card,
-    create_cooperation_gauge,
-    create_thinking_display,
-    create_round_display,
-    create_personality_radar_multi,
-    create_trait_evolution_chart,
-    create_evolution_summary_card,
-)
-from src.config import LOGS_DIR, COOPERATE_COLOR, DEFECT_COLOR, PERSONALITY_TRAITS
+from src.config import LOGS_DIR
 from src.live_state import read_live_state, LiveState
 
+# =============================================================================
+# Clean CSS Styling
+# =============================================================================
 
-# Custom CSS for dark theme
 st.markdown("""
 <style>
+    /* Dark theme */
     .stApp {
-        background-color: #1f2937;
+        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
     }
-    .stMetric {
-        background-color: #374151;
-        padding: 10px;
-        border-radius: 8px;
+    
+    /* Hide default streamlit elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Custom card styling */
+    .agent-card {
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 10px 0;
+        backdrop-filter: blur(10px);
     }
-    .stExpander {
-        background-color: #374151;
-        border-radius: 8px;
+    
+    .thinking-bubble {
+        background: rgba(59, 130, 246, 0.1);
+        border-left: 4px solid #3b82f6;
+        padding: 16px;
+        border-radius: 0 12px 12px 0;
+        margin: 8px 0;
+        font-style: italic;
+        color: #94a3b8;
     }
-    div[data-testid="stSidebarContent"] {
-        background-color: #111827;
+    
+    .status-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 600;
     }
-    .cooperate {
+    
+    .status-running { background: #22c55e20; color: #22c55e; }
+    .status-evolving { background: #eab30820; color: #eab308; }
+    .status-complete { background: #3b82f620; color: #3b82f6; }
+    
+    .big-number {
+        font-size: 48px;
+        font-weight: 700;
+        color: white;
+        line-height: 1;
+    }
+    
+    .label {
+        font-size: 14px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .move-cooperate {
         color: #22c55e;
         font-weight: bold;
     }
-    .defect {
+    
+    .move-defect {
         color: #ef4444;
         font-weight: bold;
+    }
+    
+    .divider {
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.3), transparent);
+        margin: 24px 0;
     }
 </style>
 """, unsafe_allow_html=True)
 
+
+# =============================================================================
+# Data Loading
+# =============================================================================
 
 def load_generation_data(log_dir: str = LOGS_DIR) -> list[dict]:
     """Load all generation log files."""
@@ -84,504 +121,458 @@ def load_generation_data(log_dir: str = LOGS_DIR) -> list[dict]:
                 data.append(json.load(f))
         except (json.JSONDecodeError, IOError):
             continue
-    
     return data
 
 
-def load_single_generation(generation: int, log_dir: str = LOGS_DIR) -> Optional[dict]:
-    """Load a specific generation's data."""
-    log_file = Path(log_dir) / f"generation_{generation:03d}.json"
-    if not log_file.exists():
-        return None
-    
-    with open(log_file) as f:
-        return json.load(f)
-
+# =============================================================================
+# Main App
+# =============================================================================
 
 def main():
-    """Main dashboard application."""
     # Header
-    st.title("🧬 DarwinLM")
-    st.markdown("### Evolutionary Prisoner's Dilemma Tournament")
+    st.markdown("""
+    <div style="text-align: center; padding: 20px 0 40px 0;">
+        <h1 style="font-size: 3rem; margin: 0; color: white;">
+            🧬 DarwinLM
+        </h1>
+        <p style="font-size: 1.2rem; color: #64748b; margin-top: 8px;">
+            Watch AI personalities evolve through the Prisoner's Dilemma
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Load data
-    all_generation_data = load_generation_data()
     live_state = read_live_state()
+    all_data = load_generation_data()
     
-    # Sidebar
-    with st.sidebar:
-        st.header("🎛️ Controls")
-        
-        # View mode - include Live option
-        view_mode = st.radio(
-            "View Mode",
-            ["🔴 Live", "📊 Overview", "🧬 Evolution", "🤖 Agents", "🎮 Matches", "🌳 Lineage"],
-            key="view_mode",
-        )
-        
-        st.divider()
-        
-        # Show generation selector only for non-live modes
-        if view_mode != "🔴 Live":
-            if all_generation_data:
-                max_gen = max(d["generation"] for d in all_generation_data)
-                selected_gen = st.slider(
-                    "Select Generation",
-                    min_value=0,
-                    max_value=max_gen,
-                    value=max_gen,
-                    key="gen_slider",
-                )
-                
-                st.divider()
-                
-                # Quick stats
-                current_data = load_single_generation(selected_gen)
-                if current_data:
-                    stats = current_data.get("statistics", {})
-                    st.metric("Cooperation Rate", f"{stats.get('cooperation_rate', 0):.1%}")
-                    st.metric("Mutual Cooperation", f"{stats.get('mutual_cooperation_rate', 0):.1%}")
-                    st.metric("Avg Score/Round", f"{stats.get('avg_score_per_round', 0):.1f}")
-            else:
-                selected_gen = 0
-        else:
-            selected_gen = live_state.generation if live_state else 0
-            
-            # Live mode controls
-            if live_state:
-                st.metric("Status", live_state.status.upper())
-                st.metric("Generation", live_state.generation)
-                st.metric("Progress", f"{live_state.match_number}/{live_state.total_matches}")
-            
-            # Auto-refresh toggle
-            auto_refresh = st.checkbox("Auto-refresh (2s)", value=True, key="auto_refresh")
-            if auto_refresh:
-                time.sleep(0.1)  # Small delay to prevent tight loop
-                st.rerun()
+    # Navigation tabs
+    if live_state and live_state.status in ["running", "evolving"]:
+        tab1, tab2, tab3 = st.tabs(["🔴 LIVE", "📊 Results", "🧬 Evolution"])
+        default_tab = 0
+    else:
+        tab1, tab2, tab3 = st.tabs(["🔴 LIVE", "📊 Results", "🧬 Evolution"])
+        default_tab = 1 if all_data else 0
     
-    # Handle no data case for non-live modes
-    if not all_generation_data and view_mode != "🔴 Live":
-        st.warning("No generation data found. Run the evolution first!")
-        st.code("python main.py evolve --generations 10 --live", language="bash")
-        
-        # Show option to run evolution
-        if st.button("🚀 Run Evolution (Demo Mode)"):
-            with st.spinner("Running evolution... This may take a few minutes."):
-                try:
-                    from main import run_evolution
-                    asyncio.run(run_evolution(num_generations=3, num_agents=4, verbose=False))
-                    st.success("Evolution complete! Refresh the page to see results.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error running evolution: {e}")
+    with tab1:
+        show_live_view(live_state)
+    
+    with tab2:
+        show_results_view(all_data)
+    
+    with tab3:
+        show_evolution_view(all_data)
+
+
+# =============================================================================
+# LIVE VIEW
+# =============================================================================
+
+def show_live_view(live_state: Optional[LiveState]):
+    """Clean live tournament view."""
+    
+    if not live_state or live_state.status == "idle":
+        show_waiting_state()
         return
     
-    # Main content based on view mode
-    if view_mode == "🔴 Live":
-        show_live(live_state)
-    elif view_mode == "📊 Overview":
-        show_overview(all_generation_data, selected_gen)
-    elif view_mode == "🧬 Evolution":
-        show_evolution(all_generation_data)
-    elif view_mode == "🤖 Agents":
-        show_agents(selected_gen)
-    elif view_mode == "🎮 Matches":
-        show_matches(selected_gen)
-    elif view_mode == "🌳 Lineage":
-        show_lineage(all_generation_data)
-
-
-def show_live(live_state: Optional[LiveState]):
-    """Show live tournament progress."""
-    st.header("🔴 Live Tournament")
+    # Status header
+    status_class = f"status-{live_state.status}"
+    st.markdown(f"""
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+        <span class="status-badge {status_class}">{live_state.status.upper()}</span>
+        <span style="color: #64748b;">Generation {live_state.generation}</span>
+    </div>
+    """, unsafe_allow_html=True)
     
-    if not live_state:
-        st.info("No live tournament running. Start one with:")
-        st.code("python main.py evolve --generations 10 --live", language="bash")
+    # Progress
+    progress = live_state.progress_percent / 100
+    st.progress(progress)
+    st.markdown(f"<p style='text-align: center; color: #64748b;'>Match {live_state.match_number} of {live_state.total_matches}</p>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    # Main content - two columns
+    col1, col2 = st.columns([3, 2])
+    
+    with col1:
+        st.markdown("### 🏆 Leaderboard")
+        show_leaderboard(live_state.leaderboard)
+    
+    with col2:
+        st.markdown("### 📊 Stats")
+        show_live_stats(live_state)
+    
+    # Recent match with AI thinking
+    if live_state.recent_matches:
+        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+        st.markdown("### 🎮 Latest Match")
+        show_latest_match(live_state.recent_matches[0])
+    
+    # Auto-refresh
+    time.sleep(2)
+    st.rerun()
+
+
+def show_waiting_state():
+    """Show when no tournament is running."""
+    st.markdown("""
+    <div style="text-align: center; padding: 60px 20px;">
+        <div style="font-size: 64px; margin-bottom: 20px;">⏳</div>
+        <h2 style="color: white; margin-bottom: 16px;">No Tournament Running</h2>
+        <p style="color: #64748b; max-width: 400px; margin: 0 auto 24px auto;">
+            Start a tournament to watch AI agents with random personalities 
+            compete and evolve over generations.
+        </p>
+        <code style="background: #1e293b; padding: 12px 20px; border-radius: 8px; color: #22c55e;">
+            python main.py evolve --generations 3 --live
+        </code>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def show_leaderboard(leaderboard: list[dict]):
+    """Clean leaderboard display."""
+    if not leaderboard:
+        st.info("Waiting for first match...")
         return
     
-    # Status indicator
-    status_colors = {
-        "idle": "gray",
-        "running": "green", 
-        "evolving": "yellow",
-        "complete": "blue",
-    }
-    status_color = status_colors.get(live_state.status, "gray")
-    
-    # Progress section
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Generation", live_state.generation)
-    with col2:
-        st.metric("Match", f"{live_state.match_number}/{live_state.total_matches}")
-    with col3:
-        st.metric("Status", live_state.status.upper())
-    with col4:
-        coop_rate = live_state.cooperation_rate * 100 if live_state.cooperation_rate else 0
-        st.metric("Cooperation", f"{coop_rate:.1f}%")
-    
-    # Progress bar
-    progress_pct = live_state.progress_percent / 100
-    st.progress(progress_pct, text=f"Tournament Progress: {live_state.progress_percent:.0f}%")
-    
-    # Two-column layout
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        # Leaderboard
-        st.subheader("📊 Live Leaderboard")
-        if live_state.leaderboard:
-            create_live_leaderboard(live_state.leaderboard)
+    for i, entry in enumerate(leaderboard[:4], 1):
+        agent_id = entry.get("agent_id", "?")[:10]
+        fitness = entry.get("fitness", 0)
+        personality = entry.get("personality_description", "")
+        coop_rate = entry.get("cooperation_rate", 0.5) * 100
+        
+        # Rank styling
+        if i == 1:
+            rank_icon = "🥇"
+            bg = "rgba(34, 197, 94, 0.1)"
+            border = "#22c55e"
+        elif i == 2:
+            rank_icon = "🥈"
+            bg = "rgba(148, 163, 184, 0.1)"
+            border = "#94a3b8"
+        elif i == 3:
+            rank_icon = "🥉"
+            bg = "rgba(205, 127, 50, 0.1)"
+            border = "#cd7f32"
         else:
-            st.info("Waiting for matches to complete...")
-    
-    with col2:
-        # Recent matches
-        st.subheader("🎮 Recent Matches")
-        if live_state.recent_matches:
-            for match in live_state.recent_matches[:5]:
-                create_live_match_card(match)
-        else:
-            st.info("No matches completed yet...")
-    
-    # Live statistics
-    st.subheader("📈 Live Statistics")
-    col1, col2, col3 = st.columns(3)
-    
-    total_moves = live_state.total_cooperations + live_state.total_defections
-    total_rounds = live_state.mutual_cooperations + live_state.mutual_defections + (total_moves // 2 - live_state.mutual_cooperations - live_state.mutual_defections) if total_moves > 0 else 0
-    
-    with col1:
-        if total_moves > 0:
-            create_cooperation_gauge(live_state.cooperation_rate)
-        else:
-            st.metric("Overall Cooperation", "N/A")
-    
-    with col2:
-        if total_rounds > 0:
-            mutual_coop_rate = live_state.mutual_cooperations / (live_state.match_number * 10) if live_state.match_number > 0 else 0
-            st.metric("Mutual Cooperations", live_state.mutual_cooperations)
-            st.caption(f"Both players cooperated")
-        else:
-            st.metric("Mutual Cooperations", "0")
-    
-    with col3:
-        if total_rounds > 0:
-            mutual_def_rate = live_state.mutual_defections / (live_state.match_number * 10) if live_state.match_number > 0 else 0
-            st.metric("Mutual Defections", live_state.mutual_defections)
-            st.caption(f"Both players defected")
-        else:
-            st.metric("Mutual Defections", "0")
-    
-    # Last updated
-    st.caption(f"Last updated: {live_state.last_updated}")
+            rank_icon = "4"
+            bg = "rgba(239, 68, 68, 0.05)"
+            border = "#ef4444"
+        
+        st.markdown(f"""
+        <div style="
+            background: {bg};
+            border-left: 3px solid {border};
+            padding: 12px 16px;
+            margin: 8px 0;
+            border-radius: 0 8px 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        ">
+            <div>
+                <span style="font-size: 20px; margin-right: 12px;">{rank_icon}</span>
+                <span style="color: white; font-weight: 600;">{agent_id}</span>
+                <span style="color: #64748b; font-size: 12px; margin-left: 8px;">{personality}</span>
+            </div>
+            <div style="text-align: right;">
+                <span style="color: white; font-weight: 700; font-size: 18px;">{fitness}</span>
+                <span style="color: #64748b; font-size: 12px;"> pts</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 
-def show_overview(all_data: list[dict], selected_gen: int):
-    """Show overview dashboard."""
-    st.header("📊 Evolution Overview")
+def show_live_stats(live_state: LiveState):
+    """Show live statistics."""
+    coop_rate = live_state.cooperation_rate * 100 if live_state.cooperation_rate else 0
     
-    # Main charts
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.plotly_chart(
-            create_fitness_chart(all_data),
-            use_container_width=True,
-        )
-    
-    with col2:
-        st.plotly_chart(
-            create_cooperation_rate_chart(all_data),
-            use_container_width=True,
-        )
-    
-    # Gene heatmap
-    st.plotly_chart(
-        create_gene_heatmap(all_data),
-        use_container_width=True,
+    # Cooperation gauge
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=coop_rate,
+        title={"text": "Cooperation Rate", "font": {"size": 14, "color": "#64748b"}},
+        number={"suffix": "%", "font": {"size": 32, "color": "white"}},
+        gauge={
+            "axis": {"range": [0, 100], "tickcolor": "#64748b"},
+            "bar": {"color": "#22c55e" if coop_rate >= 50 else "#ef4444"},
+            "bgcolor": "#1e293b",
+            "bordercolor": "#334155",
+            "steps": [
+                {"range": [0, 50], "color": "rgba(239, 68, 68, 0.1)"},
+                {"range": [50, 100], "color": "rgba(34, 197, 94, 0.1)"},
+            ],
+        },
+    ))
+    fig.update_layout(
+        height=200,
+        margin=dict(l=20, r=20, t=40, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"),
     )
+    st.plotly_chart(fig, use_container_width=True)
     
-    # Summary stats
-    st.subheader("📈 Evolution Summary")
-    
-    if len(all_data) >= 2:
-        first_gen = all_data[0]
-        last_gen = all_data[-1]
-        
-        col1, col2, col3, col4 = st.columns(4)
-        
-        first_fitnesses = [r["fitness"] for r in first_gen.get("tournament", {}).get("agent_rankings", [])]
-        last_fitnesses = [r["fitness"] for r in last_gen.get("tournament", {}).get("agent_rankings", [])]
-        
-        with col1:
-            first_max = max(first_fitnesses) if first_fitnesses else 0
-            last_max = max(last_fitnesses) if last_fitnesses else 0
-            st.metric(
-                "Max Fitness",
-                last_max,
-                delta=last_max - first_max,
-            )
-        
-        with col2:
-            first_avg = sum(first_fitnesses) / len(first_fitnesses) if first_fitnesses else 0
-            last_avg = sum(last_fitnesses) / len(last_fitnesses) if last_fitnesses else 0
-            st.metric(
-                "Avg Fitness",
-                f"{last_avg:.1f}",
-                delta=f"{last_avg - first_avg:.1f}",
-            )
-        
-        with col3:
-            first_coop = first_gen.get("statistics", {}).get("cooperation_rate", 0)
-            last_coop = last_gen.get("statistics", {}).get("cooperation_rate", 0)
-            st.metric(
-                "Cooperation Rate",
-                f"{last_coop:.1%}",
-                delta=f"{(last_coop - first_coop) * 100:.1f}%",
-            )
-        
-        with col4:
-            st.metric(
-                "Generations",
-                len(all_data),
-            )
+    # Quick stats
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Mutual Coop", live_state.mutual_cooperations)
+    with col2:
+        st.metric("Mutual Defect", live_state.mutual_defections)
 
 
-def show_evolution(all_data: list[dict]):
-    """Show personality evolution analysis."""
-    st.header("🧬 Personality Evolution")
+def show_latest_match(match: dict):
+    """Show the latest match with simple display."""
+    a1_id = match.get("agent1_id", "?")[:10]
+    a2_id = match.get("agent2_id", "?")[:10]
+    a1_score = match.get("agent1_score", 0)
+    a2_score = match.get("agent2_score", 0)
+    a1_desc = match.get("agent1_description", "")
+    a2_desc = match.get("agent2_description", "")
+    winner = match.get("winner_id")
     
-    if len(all_data) < 2:
-        st.info("Need at least 2 generations to show evolution analysis.")
+    # Determine winner styling
+    if winner == match.get("agent1_id"):
+        a1_style = "color: #22c55e; font-weight: bold;"
+        a2_style = "color: #ef4444;"
+        result_text = f"{a1_id} wins!"
+    elif winner == match.get("agent2_id"):
+        a1_style = "color: #ef4444;"
+        a2_style = "color: #22c55e; font-weight: bold;"
+        result_text = f"{a2_id} wins!"
+    else:
+        a1_style = a2_style = "color: #eab308;"
+        result_text = "Draw!"
+    
+    st.markdown(f"""
+    <div class="agent-card">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="text-align: center; flex: 1;">
+                <div style="{a1_style} font-size: 24px;">{a1_id}</div>
+                <div style="color: #64748b; font-size: 12px;">{a1_desc}</div>
+                <div style="font-size: 36px; color: white; margin-top: 8px;">{a1_score}</div>
+            </div>
+            <div style="color: #64748b; font-size: 24px; padding: 0 20px;">vs</div>
+            <div style="text-align: center; flex: 1;">
+                <div style="{a2_style} font-size: 24px;">{a2_id}</div>
+                <div style="color: #64748b; font-size: 12px;">{a2_desc}</div>
+                <div style="font-size: 36px; color: white; margin-top: 8px;">{a2_score}</div>
+            </div>
+        </div>
+        <div style="text-align: center; margin-top: 16px; color: #94a3b8;">
+            {result_text}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# RESULTS VIEW
+# =============================================================================
+
+def show_results_view(all_data: list[dict]):
+    """Show tournament results."""
+    if not all_data:
+        st.markdown("""
+        <div style="text-align: center; padding: 60px 20px;">
+            <div style="font-size: 64px; margin-bottom: 20px;">📊</div>
+            <h2 style="color: white;">No Results Yet</h2>
+            <p style="color: #64748b;">Run a tournament to see results here.</p>
+        </div>
+        """, unsafe_allow_html=True)
         return
     
-    # Get first and last generation stats
+    # Get final generation
+    final_gen = all_data[-1]
+    gen_num = final_gen.get("generation", 0)
+    
+    st.markdown(f"### Generation {gen_num} Results")
+    
+    # Winner announcement
+    rankings = final_gen.get("tournament", {}).get("agent_rankings", [])
+    if rankings:
+        winner = rankings[0]
+        agents = final_gen.get("agents", [])
+        winner_agent = next((a for a in agents if a["id"] == winner["agent_id"]), None)
+        winner_personality = winner_agent.get("short_description", "") if winner_agent else ""
+        
+        st.markdown(f"""
+        <div class="agent-card" style="text-align: center; background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05));">
+            <div style="font-size: 48px;">🏆</div>
+            <h2 style="color: #22c55e; margin: 12px 0 4px 0;">Champion</h2>
+            <div style="font-size: 24px; color: white;">{winner['agent_id'][:12]}</div>
+            <div style="color: #64748b; margin: 8px 0;">{winner_personality}</div>
+            <div style="font-size: 36px; color: white; font-weight: bold;">{winner['fitness']} pts</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    # All agents
+    st.markdown("### All Agents")
+    
+    agents = final_gen.get("agents", [])
+    rank_lookup = {r["agent_id"]: r for r in rankings}
+    
+    for agent in sorted(agents, key=lambda a: rank_lookup.get(a["id"], {}).get("rank", 99)):
+        rank_info = rank_lookup.get(agent["id"], {})
+        rank = rank_info.get("rank", "?")
+        fitness = rank_info.get("fitness", 0)
+        coop_rate = rank_info.get("cooperation_rate", 0.5) * 100
+        personality = agent.get("short_description", agent.get("personality", {}).get("trust", ""))
+        
+        # Get key personality traits
+        p = agent.get("personality", agent.get("dna", {}))
+        trust = p.get("trust", 0.5) * 100
+        honesty = p.get("honesty", 0.5) * 100
+        vengefulness = p.get("vengefulness", 0.5) * 100
+        
+        st.markdown(f"""
+        <div class="agent-card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <span style="font-size: 20px; margin-right: 8px;">#{rank}</span>
+                    <span style="color: white; font-size: 18px; font-weight: 600;">{agent['id'][:12]}</span>
+                    <div style="color: #64748b; margin-top: 4px;">{personality}</div>
+                </div>
+                <div style="text-align: right;">
+                    <div style="color: white; font-size: 24px; font-weight: bold;">{fitness} <span style="font-size: 14px; color: #64748b;">pts</span></div>
+                    <div style="color: {'#22c55e' if coop_rate >= 50 else '#ef4444'}; font-size: 14px;">{coop_rate:.0f}% cooperative</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 24px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(148, 163, 184, 0.1);">
+                <div><span style="color: #64748b;">Trust:</span> <span style="color: white;">{trust:.0f}%</span></div>
+                <div><span style="color: #64748b;">Honesty:</span> <span style="color: white;">{honesty:.0f}%</span></div>
+                <div><span style="color: #64748b;">Vengefulness:</span> <span style="color: white;">{vengefulness:.0f}%</span></div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# =============================================================================
+# EVOLUTION VIEW
+# =============================================================================
+
+def show_evolution_view(all_data: list[dict]):
+    """Show how personalities evolved."""
+    if len(all_data) < 2:
+        st.markdown("""
+        <div style="text-align: center; padding: 60px 20px;">
+            <div style="font-size: 64px; margin-bottom: 20px;">🧬</div>
+            <h2 style="color: white;">Need More Generations</h2>
+            <p style="color: #64748b;">Run at least 2 generations to see evolution analysis.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
     first_gen = all_data[0]
     last_gen = all_data[-1]
     
     first_stats = first_gen.get("gene_statistics", {})
     last_stats = last_gen.get("gene_statistics", {})
     
-    # Evolution Summary Card
-    if first_stats and last_stats:
-        create_evolution_summary_card(first_stats, last_stats)
+    st.markdown(f"### Evolution: Generation 0 → {last_gen.get('generation', len(all_data)-1)}")
     
-    st.divider()
-    
-    # Trait selector for detailed view
-    st.subheader("📈 Trait Evolution Over Time")
-    
-    available_traits = list(first_stats.keys()) if first_stats else PERSONALITY_TRAITS
-    selected_trait = st.selectbox(
-        "Select trait to analyze",
-        available_traits,
-        format_func=lambda x: x.replace("_", " ").title()
-    )
-    
-    if selected_trait:
-        fig = create_trait_evolution_chart(all_data, selected_trait)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.divider()
-    
-    # Compare first vs last generation personalities
-    st.subheader("🎭 Personality Comparison: Gen 0 vs Final")
-    
-    # Get agents from first and last generation
-    first_agents = first_gen.get("agents", [])[:4]
-    last_agents = last_gen.get("agents", [])[:4]
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Generation 0 (Random Start)**")
-        if first_agents:
-            fig = create_personality_radar_multi(first_agents, "Gen 0 Personalities")
-            st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.markdown(f"**Generation {last_gen.get('generation', 'Final')} (Evolved)**")
-        if last_agents:
-            fig = create_personality_radar_multi(last_agents, "Final Personalities")
-            st.plotly_chart(fig, use_container_width=True)
-    
-    st.divider()
-    
-    # Key findings
-    st.subheader("🔍 Key Findings")
-    
-    if first_stats and last_stats:
-        # Calculate biggest changes
-        changes = []
-        for trait in first_stats:
-            if trait in last_stats:
-                gen0_mean = first_stats[trait].get("mean", 0.5)
-                final_mean = last_stats[trait].get("mean", 0.5)
-                change = final_mean - gen0_mean
-                changes.append({
-                    "trait": trait,
-                    "gen0": gen0_mean,
-                    "final": final_mean,
-                    "change": change,
-                })
-        
-        changes.sort(key=lambda x: abs(x["change"]), reverse=True)
-        
-        if changes:
-            biggest = changes[0]
-            direction = "increased" if biggest["change"] > 0 else "decreased"
-            
-            st.markdown(f"""
-            **Biggest Change:** {biggest['trait'].replace('_', ' ').title()} {direction} 
-            from {biggest['gen0']:.0%} to {biggest['final']:.0%}
-            
-            **What this means:** Evolution selected for agents with {'higher' if biggest['change'] > 0 else 'lower'} 
-            {biggest['trait'].replace('_', ' ')}, suggesting this trait conferred a survival advantage.
-            """)
-            
-            # Interpret the evolved strategy
-            st.markdown("### 🎯 Evolved Strategy Profile")
-            
-            high_traits = [c["trait"] for c in changes if c["final"] > 0.6]
-            low_traits = [c["trait"] for c in changes if c["final"] < 0.4]
-            
-            if high_traits or low_traits:
-                st.markdown("The evolved population tends to have:")
-                if high_traits:
-                    st.markdown("- **High:** " + ", ".join(t.replace("_", " ").title() for t in high_traits))
-                if low_traits:
-                    st.markdown("- **Low:** " + ", ".join(t.replace("_", " ").title() for t in low_traits))
-
-
-def show_agents(selected_gen: int):
-    """Show agent details for selected generation."""
-    st.header(f"🤖 Generation {selected_gen} Agents")
-    
-    data = load_single_generation(selected_gen)
-    if not data:
-        st.error("Could not load generation data.")
-        return
-    
-    agents = data.get("agents", [])
-    rankings = data.get("tournament", {}).get("agent_rankings", [])
-    
-    # Create rank lookup
-    rank_lookup = {r["agent_id"]: r["rank"] for r in rankings}
-    
-    # Sort agents by rank
-    agents_sorted = sorted(agents, key=lambda a: rank_lookup.get(a["id"], 999))
-    
-    # Display agents in grid
-    cols = st.columns(2)
-    
-    for i, agent in enumerate(agents_sorted):
-        with cols[i % 2]:
-            rank = rank_lookup.get(agent["id"])
-            create_agent_card(agent, rank)
-    
-    # Show radar comparison
-    st.subheader("🎯 Strategy Comparison")
-    
-    if len(agents_sorted) >= 2:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.plotly_chart(
-                create_strategy_radar(agents_sorted[0]),
-                use_container_width=True,
-            )
-        
-        with col2:
-            # Compare with worst performer
-            st.plotly_chart(
-                create_strategy_radar(agents_sorted[-1]),
-                use_container_width=True,
-            )
-
-
-def show_matches(selected_gen: int):
-    """Show match details for selected generation."""
-    st.header(f"🎮 Generation {selected_gen} Matches")
-    
-    data = load_single_generation(selected_gen)
-    if not data:
-        st.error("Could not load generation data.")
-        return
-    
-    matches = data.get("tournament", {}).get("matches", [])
-    
-    if not matches:
-        st.info("No match data available.")
-        return
-    
-    # Match selector
-    agents_in_matches = set()
-    for m in matches:
-        agents_in_matches.add(m["agent1_id"])
-        agents_in_matches.add(m["agent2_id"])
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        agent1_filter = st.selectbox(
-            "Filter by Agent 1",
-            ["All"] + sorted(list(agents_in_matches)),
-            key="agent1_filter",
-        )
-    with col2:
-        agent2_filter = st.selectbox(
-            "Filter by Agent 2",
-            ["All"] + sorted(list(agents_in_matches)),
-            key="agent2_filter",
-        )
-    
-    # Filter matches
-    filtered_matches = matches
-    if agent1_filter != "All":
-        filtered_matches = [m for m in filtered_matches 
-                          if m["agent1_id"] == agent1_filter or m["agent2_id"] == agent1_filter]
-    if agent2_filter != "All":
-        filtered_matches = [m for m in filtered_matches 
-                          if m["agent1_id"] == agent2_filter or m["agent2_id"] == agent2_filter]
-    
-    st.write(f"Showing {len(filtered_matches)} of {len(matches)} matches")
-    
-    # Display matches
-    for match in filtered_matches[:10]:  # Limit to 10
-        with st.expander(f"{match['agent1_id'][:8]} vs {match['agent2_id'][:8]} "
-                        f"({match['agent1_total_score']} - {match['agent2_total_score']})"):
-            create_match_viewer(match)
-
-
-def show_lineage(all_data: list[dict]):
-    """Show agent lineage tree."""
-    st.header("🌳 Agent Lineage")
-    
-    if len(all_data) < 2:
-        st.info("Need at least 2 generations to show lineage.")
-        return
-    
-    st.plotly_chart(
-        create_lineage_tree(all_data),
-        use_container_width=True,
-    )
-    
-    # Show survivor history
-    st.subheader("🏆 Survivor History")
-    
-    survivor_data = []
-    for gen_data in all_data:
-        survivors = gen_data.get("survivors", [])
-        if survivors:
-            survivor_data.append({
-                "Generation": gen_data["generation"],
-                "Survivors": ", ".join(s[:8] for s in survivors),
+    # Calculate changes
+    changes = []
+    for trait in first_stats:
+        if trait in last_stats:
+            gen0 = first_stats[trait].get("mean", 0.5)
+            final = last_stats[trait].get("mean", 0.5)
+            change = final - gen0
+            changes.append({
+                "trait": trait.replace("_", " ").title(),
+                "gen0": gen0,
+                "final": final,
+                "change": change,
             })
     
-    if survivor_data:
-        st.dataframe(survivor_data, use_container_width=True)
+    changes.sort(key=lambda x: abs(x["change"]), reverse=True)
+    
+    # Key insight
+    if changes:
+        biggest = changes[0]
+        direction = "increased" if biggest["change"] > 0 else "decreased"
+        
+        st.markdown(f"""
+        <div class="agent-card" style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.05));">
+            <h3 style="color: #3b82f6; margin-top: 0;">🔬 Key Finding</h3>
+            <p style="color: white; font-size: 18px; margin: 12px 0;">
+                <strong>{biggest['trait']}</strong> {direction} the most: 
+                {biggest['gen0']:.0%} → {biggest['final']:.0%}
+            </p>
+            <p style="color: #64748b;">
+                Evolution selected for agents with {'higher' if biggest['change'] > 0 else 'lower'} {biggest['trait'].lower()}.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    # Trait changes
+    st.markdown("### Trait Changes")
+    
+    col1, col2 = st.columns(2)
+    
+    increased = [c for c in changes if c["change"] > 0.03]
+    decreased = [c for c in changes if c["change"] < -0.03]
+    
+    with col1:
+        st.markdown("**📈 Increased (selected FOR)**")
+        for c in increased:
+            st.markdown(f"""
+            <div style="background: rgba(34, 197, 94, 0.1); padding: 8px 12px; border-radius: 8px; margin: 4px 0;">
+                <span style="color: white;">{c['trait']}</span>
+                <span style="color: #22c55e; float: right;">+{c['change']:.0%}</span>
+            </div>
+            """, unsafe_allow_html=True)
+        if not increased:
+            st.markdown("<p style='color: #64748b;'>No significant increases</p>", unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("**📉 Decreased (selected AGAINST)**")
+        for c in decreased:
+            st.markdown(f"""
+            <div style="background: rgba(239, 68, 68, 0.1); padding: 8px 12px; border-radius: 8px; margin: 4px 0;">
+                <span style="color: white;">{c['trait']}</span>
+                <span style="color: #ef4444; float: right;">{c['change']:.0%}</span>
+            </div>
+            """, unsafe_allow_html=True)
+        if not decreased:
+            st.markdown("<p style='color: #64748b;'>No significant decreases</p>", unsafe_allow_html=True)
+    
+    st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+    
+    # Evolved strategy summary
+    st.markdown("### 🎯 Evolved Strategy")
+    
+    high_traits = [c["trait"] for c in changes if c["final"] > 0.6]
+    low_traits = [c["trait"] for c in changes if c["final"] < 0.4]
+    
+    strategy_desc = []
+    if "Forgiveness" in high_traits:
+        strategy_desc.append("forgiving of mistakes")
+    if "Vengefulness" in high_traits:
+        strategy_desc.append("retaliates when betrayed")
+    if "Trust" in high_traits:
+        strategy_desc.append("trusting of others")
+    if "Honesty" in high_traits:
+        strategy_desc.append("honest in communication")
+    if "Trust" in low_traits:
+        strategy_desc.append("suspicious of others")
+    if "Patience" in high_traits:
+        strategy_desc.append("thinks long-term")
+    
+    if strategy_desc:
+        st.markdown(f"""
+        <div class="agent-card">
+            <p style="color: white; font-size: 16px; margin: 0;">
+                The winning strategy is to be <strong>{', '.join(strategy_desc[:3])}</strong>.
+            </p>
+            <p style="color: #64748b; margin-top: 8px;">
+                This resembles the famous "Tit-for-Tat" strategy, but discovered through AI evolution.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
