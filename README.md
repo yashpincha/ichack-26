@@ -1,4 +1,6 @@
-# ⚡ CLAM (Command Line Assistance Module)
+<div align="center">
+
+  # ⚡ CLAM (Command Line Assistance Module)
 
 ### Your Intelligent Command-Line Companion
 
