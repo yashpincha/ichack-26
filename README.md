@@ -1,26 +1,11 @@
-<div align="center">
+# 🎯 CLAM: Command Line Assitance Module
+========================================
 
-  # ⚡ CLAM (Command Line Assistance Module)
+Not only beginners, but even experienced developers often forget command syntax and flags, and find themselves needing to refer to 
+external sources (e.g. LLMs and documentation). Especially when unfamiliar with the command line (or a new tool), it can be very easy 
+to make irreversible and destructive mistakes.
 
-### Your Intelligent Command-Line Companion
-
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](https://github.com/yashpincha/ichack-26)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/yashpincha/ichack-26/releases)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![ICHack '26](https://img.shields.io/badge/ICHack-'26-purple?style=flat-square)](https://ichack.org)
-
-**Type less. Do more. Stay safe.**
-
-</div>
-
-
-## 🎯 What is CLAM?
-
-The command line is one of the most powerful tools in software engineering, yet it remains one of the least accessible. Even experienced developers forget command syntax, mistype flags, or constantly switch between the terminal and external resources just to debug errors. For beginners, the experience can feel intimidating and error-prone, where small mistakes can lead to destructive outcomes.
-
-As students and developers who spend much of our day in Bash, we faced this friction daily — searching for flags, copying commands from documentation, and relying on AI tools outside the terminal. That constant context switching broke our flow and slowed us down. We kept asking ourselves: why can’t the terminal just help us directly?
-
-So we built CLAM (Command Line Assistant Model) — an AI-powered assistant embedded directly into the shell that provides real-time autocomplete, safety checks, and automatic error fixes. By bringing intelligence inside the terminal, CLAM reduces friction and lets developers focus on building instead of memorizing commands.
+CLAM uses LLMs (perhaps local!) to help you confidently use UNIX commands. Whether you are new to UNIX or deeply experienced, CLAM can help you save time and increase your productivity. In particular, you no longer have to navigate between external LLMs and your terminal!
 
 ## Quick Start
 
