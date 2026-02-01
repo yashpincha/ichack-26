@@ -96,12 +96,17 @@ Run this command? [Y/n]
 source autocomplete config
 ```
 
-![Configuration Options](https://github.com/user-attachments/assets/61578f27-594f-4bc4-ba86-c5f99a41e8a9)
-
 Update settings with:
 
 ```bash
 autocomplete config set <key> <value>
+```
+
+Enable, disable, or check safeguarding status with:
+```bash
+autocomplete safeguarding enable
+autocomplete safeguarding disable
+autocomplete safeguarding status
 ```
 
 ## Usage Tracking
