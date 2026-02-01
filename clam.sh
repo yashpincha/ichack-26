@@ -927,8 +927,6 @@ show_help() {
     echo "    status            Show safeguard status"
     echo "  clear               Clear cache and log files"
     echo "  --help              Show this help message"
-    echo
-    echo "Submit issues at: https://github.com/closedloop-technologies/clam-sh/issues"
 }
 
 is_subshell() {
@@ -1143,7 +1141,7 @@ _clam_load_config() {
 install_command() {
     local bashrc_file="$HOME/.bashrc" clam_setup="source clam enable" clam_cli_setup="complete -F _clamsh_cli clam"
     if ! command -v clam &>/dev/null; then
-        echo_error "clam.sh not in PATH. Follow install instructions at https://github.com/closedloop-technologies/clam-sh"
+        echo_error "clam.sh not in PATH. Follow install instructions at https://github.com/yashpincha/ichack-26/tree/main"
         return
     fi
     if [[ ! -d "$HOME/.clam" ]]; then
