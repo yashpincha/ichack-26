@@ -1,9 +1,13 @@
 IC Hack 2026: autocomplete.sh
 ========================================================
 
-## Autocomplete for your Bash terminal
+## CLAM (Command Line Assistance Module)
 
-`autocomplete.sh` uses LLMs (perhaps local!) to help you confidently use UNIX commands. Whether you are new to UNIX or deeply experienced, `autocomplete.sh` can help you save time and increase your productivity. In particular, you no longer have to navigate between external LLMs and your terminal!
+The command line is one of the most powerful tools in software engineering, yet it remains one of the least accessible. Even experienced developers forget command syntax, mistype flags, or constantly switch between the terminal and external resources just to debug errors. For beginners, the experience can feel intimidating and error-prone, where small mistakes can lead to destructive outcomes.
+
+As students and developers who spend much of our day in Bash, we faced this friction daily — searching for flags, copying commands from documentation, and relying on AI tools outside the terminal. That constant context switching broke our flow and slowed us down. We kept asking ourselves: why can’t the terminal just help us directly?
+
+So we built CLAM (Command Line Assistant Model) — an AI-powered assistant embedded directly into the shell that provides real-time autocomplete, safety checks, and automatic error fixes. By bringing intelligence inside the terminal, CLAM reduces friction and lets developers focus on building instead of memorizing commands.
 
 ## Quick Start
 
