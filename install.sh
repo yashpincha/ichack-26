@@ -1,12 +1,10 @@
 #!/bin/bash
 
-# Detect the current shell
 detect_shell() {
     if [ -n "$BASH_VERSION" ]; then
         echo "bash"
     else
-        # Check the parent process's shell
-        parent_shell=$(ps -p $PPID -o comm=)
+        local parent_shell=$(ps -p $PPID -o comm=)
         case "$parent_shell" in
             *bash*) echo "bash" ;;
             *) echo "unknown" ;;
@@ -14,38 +12,28 @@ detect_shell() {
     fi
 }
 
-SHELL_TYPE=$(detect_shell)
-case "$SHELL_TYPE" in
-    bash)
-        SCRIPT_NAME="clam.sh"
-        ;;
-    *)
-        echo "ERROR: Unsupported shell. Currently only bash is supported."
-        exit 1
-        ;;
-esac
+shell_type=$(detect_shell)
 
-# The default location to install the LLMs
-INSTALL_LOCATION="$HOME/.local/bin/$SCRIPT_NAME"
-
-# Check if INSTALL_LOCATION exists, if not, set to /usr/local/bin
-if [ ! -d "$(dirname "$INSTALL_LOCATION")" ]; then
-    INSTALL_LOCATION="/usr/local/bin/$SCRIPT_NAME"
+if [[ "$shell_type" != "bash" ]]; then
+    echo "ERROR: Unsupported shell. Currently only bash is supported."
+    exit 1
 fi
 
-# Copy local clam.sh file
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cp "$SCRIPT_DIR/clam.sh" "$INSTALL_LOCATION"
+script_name="clam.sh"
+install_path="$HOME/.local/bin/$script_name"
 
-# Install the LLMs
-chmod +x "$INSTALL_LOCATION"
+if [ ! -d "$(dirname "$install_path")" ]; then
+    install_path="/usr/local/bin/$script_name"
+fi
 
-# Create symlink without .sh extension for easier command usage
-SYMLINK_LOCATION="$(dirname "$INSTALL_LOCATION")/clam"
-rm -f "$SYMLINK_LOCATION"
-ln -s "$INSTALL_LOCATION" "$SYMLINK_LOCATION"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+cp "$script_dir/clam.sh" "$install_path"
+chmod +x "$install_path"
 
-# Check if jq is installed
+symlink_path="$(dirname "$install_path")/clam"
+rm -f "$symlink_path"
+ln -s "$install_path" "$symlink_path"
+
 if ! command -v jq > /dev/null 2>&1; then
     echo "ERROR: jq is not installed. Please install jq to continue."
     echo "For Ubuntu/Debian: sudo apt-get install jq"
@@ -54,7 +42,6 @@ if ! command -v jq > /dev/null 2>&1; then
     exit 1
 fi
 
-# Source bash-completion if _init_completion function does not exist
 if ! command -v _init_completion > /dev/null 2>&1; then
     # shellcheck disable=SC1091
     if [ -f /usr/share/bash-completion/bash_completion ]; then
@@ -67,5 +54,4 @@ if ! command -v _init_completion > /dev/null 2>&1; then
     fi
 fi
 
-# Proceed with installation
-"$INSTALL_LOCATION" install
+"$install_path" install

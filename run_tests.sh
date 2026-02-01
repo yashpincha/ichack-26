@@ -1,10 +1,8 @@
 #!/bin/bash
 
-# check if bats is installed
 if ! command -v bats &> /dev/null; then
     echo "bats not found. Installing..."
 
-    # detect package manager and install
     if command -v apt-get &> /dev/null; then
         sudo apt-get update && sudo apt-get install -y bats
     elif command -v brew &> /dev/null; then
@@ -21,7 +19,6 @@ if ! command -v bats &> /dev/null; then
         exit 1
     fi
 
-    # Verify installation
     if ! command -v bats &> /dev/null; then
         echo "Error: bats installation failed."
         exit 1

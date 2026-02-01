@@ -1,14 +1,11 @@
 #!/bin/bash
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Create test file
 mkdir -p /tmp/test_dir
 echo "test" > /tmp/test_dir/testfile.txt
 
-# Source and enable clam
-source "$SCRIPT_DIR/../clam.sh" > /dev/null 2>&1
+source "$script_dir/../clam.sh" > /dev/null 2>&1
 clam enable > /dev/null 2>&1
 
 echo "Test 1: Safe command (should execute without warning)"
@@ -18,8 +15,6 @@ echo ""
 
 echo "Test 2: Potentially harmful command (should show warning)"
 echo "------"
-# Use a command that will be flagged as harmful
-# Answer 'n' to cancel it
 echo "n" | timeout 5 chmod 777 /etc/passwd 2>&1 | grep -E "WARNING|Risk Level|Command cancelled" | head -5
 
 echo ""
