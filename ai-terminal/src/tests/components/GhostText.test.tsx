@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import GhostText from '../../components/GhostText';
 
 describe('GhostText Component', () => {
@@ -70,21 +70,28 @@ describe('GhostText Component', () => {
 
     it('shows tooltip on mouse enter', () => {
       render(<GhostText {...defaultProps} explanation="Switch to main branch" />);
-      const element = screen.getByText('eckout main').parentElement!;
+      // The div with class ghost-text-overlay has the mouse events
+      const element = document.querySelector('.ghost-text-overlay')!;
       
-      fireEvent.mouseEnter(element);
+      act(() => {
+        fireEvent.mouseEnter(element);
+      });
       
       expect(screen.getByText('Switch to main branch')).toBeInTheDocument();
     });
 
     it('hides tooltip on mouse leave', () => {
       render(<GhostText {...defaultProps} explanation="Switch to main branch" />);
-      const element = screen.getByText('eckout main').parentElement!;
+      const element = document.querySelector('.ghost-text-overlay')!;
       
-      fireEvent.mouseEnter(element);
+      act(() => {
+        fireEvent.mouseEnter(element);
+      });
       expect(screen.getByText('Switch to main branch')).toBeInTheDocument();
       
-      fireEvent.mouseLeave(element);
+      act(() => {
+        fireEvent.mouseLeave(element);
+      });
       expect(screen.queryByText('Switch to main branch')).not.toBeInTheDocument();
     });
   });

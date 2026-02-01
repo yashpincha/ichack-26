@@ -217,11 +217,14 @@ describe('UsageStats Component', () => {
       mockInvoke.mockResolvedValue({
         ...mockStats,
         total_cost: 0,
+        by_provider: {}, // Clear providers to avoid multiple $0.00 elements
       });
 
       render(<UsageStats />);
       await waitFor(() => {
-        expect(screen.getByText('$0.00')).toBeInTheDocument();
+        // Find the Total Cost card specifically
+        const costCard = screen.getByText('Total Cost').parentElement;
+        expect(costCard?.querySelector('.usage-value')?.textContent).toBe('$0.00');
       });
     });
 
@@ -229,6 +232,7 @@ describe('UsageStats Component', () => {
       mockInvoke.mockResolvedValue({
         ...mockStats,
         total_cost: 0.000001,
+        by_provider: {}, // Clear providers to simplify
       });
 
       render(<UsageStats />);

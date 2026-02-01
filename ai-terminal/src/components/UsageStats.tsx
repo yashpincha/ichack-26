@@ -22,7 +22,7 @@ interface UsageStatsProps {
   onClose?: () => void;
 }
 
-function UsageStats({ onClose }: UsageStatsProps) {
+function UsageStats({ onClose: _onClose }: UsageStatsProps) {
   const [stats, setStats] = useState<UsageStatsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

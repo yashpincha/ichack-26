@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAutocomplete } from '../../hooks/useAutocomplete';
 
@@ -146,14 +146,14 @@ describe('useAutocomplete Hook', () => {
       
       const { result } = renderHook(() => useAutocomplete('git'));
       
+      // Advance timers and flush promises
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.suggestion).toBe(' status');
-        expect(result.current.explanation).toBe('Check repo status');
-      });
+      expect(result.current.suggestion).toBe(' status');
+      expect(result.current.explanation).toBe('Check repo status');
     });
 
     it('clears suggestion when response is empty', async () => {
@@ -163,11 +163,10 @@ describe('useAutocomplete Hook', () => {
       
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.suggestion).toBeNull();
-      });
+      expect(result.current.suggestion).toBeNull();
     });
 
     it('clears suggestion when response is whitespace only', async () => {
@@ -177,11 +176,10 @@ describe('useAutocomplete Hook', () => {
       
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.suggestion).toBeNull();
-      });
+      expect(result.current.suggestion).toBeNull();
     });
   });
 
@@ -220,12 +218,11 @@ describe('useAutocomplete Hook', () => {
       
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.error).toBe('API Error');
-        expect(result.current.suggestion).toBeNull();
-      });
+      expect(result.current.error).toBe('API Error');
+      expect(result.current.suggestion).toBeNull();
     });
 
     it('clears error on successful request', async () => {
@@ -240,22 +237,20 @@ describe('useAutocomplete Hook', () => {
       // First request fails
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.error).toBe('API Error');
-      });
+      expect(result.current.error).toBe('API Error');
       
       // Change input to trigger new request
       rerender({ input: 'npm' });
       
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.error).toBeNull();
-      });
+      expect(result.current.error).toBeNull();
     });
   });
 
@@ -269,11 +264,10 @@ describe('useAutocomplete Hook', () => {
       
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
 
-      await waitFor(() => {
-        expect(result.current.suggestion).toBe('test');
-      });
+      expect(result.current.suggestion).toBe('test');
       
       act(() => {
         result.current.clearSuggestion();
@@ -295,6 +289,7 @@ describe('useAutocomplete Hook', () => {
       
       await act(async () => {
         vi.advanceTimersByTime(300);
+        await vi.runAllTimersAsync();
       });
       
       // Should not have been called because we cleared

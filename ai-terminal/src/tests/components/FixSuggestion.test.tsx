@@ -77,22 +77,24 @@ describe('FixSuggestion Component', () => {
   describe('Confidence Badge', () => {
     it('shows HIGH confidence badge', () => {
       render(<FixSuggestion {...defaultProps} />);
-      expect(screen.getByText('HIGH')).toBeInTheDocument();
+      // Badge renders as "✓ HIGH" - use regex to find partial match
+      expect(screen.getByText(/HIGH/)).toBeInTheDocument();
     });
 
     it('shows MEDIUM confidence badge', () => {
       render(<FixSuggestion {...defaultProps} suggestion={{ ...defaultProps.suggestion, confidence: 'medium' }} />);
-      expect(screen.getByText('MEDIUM')).toBeInTheDocument();
+      expect(screen.getByText(/MEDIUM/)).toBeInTheDocument();
     });
 
     it('shows LOW confidence badge', () => {
       render(<FixSuggestion {...defaultProps} suggestion={{ ...defaultProps.suggestion, confidence: 'low' }} />);
-      expect(screen.getByText('LOW')).toBeInTheDocument();
+      expect(screen.getByText(/LOW/)).toBeInTheDocument();
     });
 
     it('shows checkmark for high confidence', () => {
       render(<FixSuggestion {...defaultProps} />);
-      expect(screen.getByText('✓')).toBeInTheDocument();
+      // The icon is part of the badge text "✓ HIGH"
+      expect(screen.getByText(/✓/)).toBeInTheDocument();
     });
   });
 
