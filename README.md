@@ -172,7 +172,7 @@ Developers:
 - James Yang
 - Kuzey Korel
 - Syed Sameer Faisal
-- Yash Bincha
+- Yash Pincha
 
 This project was influenced by [`clam.sh`](https://github.com/closedloop-technologies/clam-sh/tree/main).
 
