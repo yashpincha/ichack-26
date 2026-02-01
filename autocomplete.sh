@@ -61,8 +61,52 @@ _autocomplete_modellist['groq:		deepseek-r1-distill-llama-70b-specdec']='{ "comp
 _autocomplete_modellist['groq:		llama-3.3-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-specdec", "provider": "groq" }'
 _autocomplete_modellist['groq:		llama-3.2-1b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-1b-preview", "provider": "groq" }'
 _autocomplete_modellist['groq:		llama-3.2-3b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-3b-preview", "provider": "groq" }'
-# Ollama model
+# Ollama models
 _autocomplete_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "codellama", "provider": "ollama" }'
+_autocomplete_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
+
+###############################################################################
+#                    Load .env from script directory (for API key)            #
+###############################################################################
+_acsh_load_dotenv() {
+    local script_dir script_src
+    script_src="${BASH_SOURCE[0]:-$0}"
+    if [[ "$script_src" != /* ]]; then
+        script_src="$(command -v "$script_src" 2>/dev/null || echo "$script_src")"
+    fi
+    if [[ -n "$script_src" ]]; then
+        script_dir="$(cd "$(dirname "$(readlink -f "$script_src" 2>/dev/null || echo "$script_src")")" && pwd)" 2>/dev/null || true
+    fi
+    if [[ -z "$script_dir" ]]; then
+        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+    fi
+    if [[ -n "$script_dir" && -f "$script_dir/.env" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$script_dir/.env"
+        set +a
+    fi
+    if [[ -f "$HOME/.autocomplete/.env" ]]; then
+        set -a
+        # shellcheck source=/dev/null
+        source "$HOME/.autocomplete/.env"
+        set +a
+    fi
+}
+_acsh_load_dotenv
+
+###############################################################################
+#                    FEP (Fix Error Please) - Context Capture                  #
+###############################################################################
+# Only set defaults if not already set (so "ACSH_LAST_COMMAND=cmd autocomplete fep" works)
+export ACSH_LAST_COMMAND="${ACSH_LAST_COMMAND:-}"
+export ACSH_LAST_EXIT_CODE="${ACSH_LAST_EXIT_CODE:-}"
+export ACSH_LAST_OUTPUT_FILE="${ACSH_LAST_OUTPUT_FILE:-$HOME/.autocomplete/last_output.txt}"
+
+_acsh_capture_command_result() {
+    export ACSH_LAST_EXIT_CODE="$?"
+    export ACSH_LAST_COMMAND="$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')"
+}
 
 ###############################################################################
 #                       System Information Functions                          #
@@ -198,6 +242,55 @@ $help_message
 $output_instructions
 "
     echo "$prompt"
+}
+
+_build_fep_prompt() {
+    local user_context="$1"
+    local last_cmd="${ACSH_LAST_COMMAND:-$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')}"
+    local last_exit="${ACSH_LAST_EXIT_CODE:-$?}"
+    local last_output=""
+
+    [[ -f "$ACSH_LAST_OUTPUT_FILE" ]] && last_output="$(tail -100 "$ACSH_LAST_OUTPUT_FILE")"
+
+    cat <<EOF
+# Error Recovery Request
+
+## Failed Command
+\`\`\`bash
+$last_cmd
+\`\`\`
+
+## Exit Code
+$last_exit
+
+## Command Output/Error
+\`\`\`
+${last_output:-"(No captured output - please describe the error)"}
+\`\`\`
+
+## Additional Context from User
+${user_context:-"(None provided)"}
+
+## Environment
+$(printf "%s\n" "$(_get_terminal_info)")
+
+## Current Directory Contents
+$(ls -la 2>/dev/null | head -20)
+
+## Recent Command History
+$(fc -ln -10 2>/dev/null)
+
+# Instructions
+Analyze the failed command and error. Provide:
+1. **Recommended Command**: A corrected or alternative command that fixes the issue
+2. **Explanation**: Brief explanation of what went wrong and why the fix works
+
+Respond in this exact JSON format:
+{
+    "recommended_command": "the fixed command here",
+    "explanation": "brief explanation of the fix"
+}
+EOF
 }
 
 ###############################################################################
@@ -442,6 +535,93 @@ openai_completion() {
     fi
     echo -n "$completions"
     log_request "$user_input" "$response_body"
+}
+
+_build_fep_payload() {
+    local prompt="$1"
+    local model temperature
+    model="${ACSH_MODEL:-gpt-4o}"
+    temperature="${ACSH_TEMPERATURE:-0.0}"
+    local system_prompt="You are an expert command-line debugger. Analyze errors and provide fixes. Respond only with valid JSON in this exact format: {\"recommended_command\": \"the fixed command\", \"explanation\": \"brief explanation\"}."
+    local base_payload
+    base_payload=$(jq -n --arg model "$model" \
+        --arg temperature "$temperature" \
+        --arg system_prompt "$system_prompt" \
+        --arg prompt "$prompt" \
+        '{
+            model: $model,
+            messages: [
+                {role: "system", content: $system_prompt},
+                {role: "user", content: $prompt}
+            ],
+            temperature: ($temperature | tonumber)
+        }')
+    case "${ACSH_PROVIDER^^}" in
+        "ANTHROPIC")
+            echo "$base_payload" | jq '. + {max_tokens: 1024}'
+            ;;
+        "GROQ")
+            echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}'
+            ;;
+        "OLLAMA")
+            echo "$base_payload" | jq '. + {format: "json", stream: false}'
+            ;;
+        *)
+            echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}'
+            ;;
+    esac
+}
+
+fep_completion() {
+    local user_context="$1"
+    local prompt endpoint payload response status_code response_body api_key timeout attempt max_attempts
+
+    prompt="$(_build_fep_prompt "$user_context")"
+    endpoint="${ACSH_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
+    timeout="${ACSH_TIMEOUT:-60}"
+    api_key="${ACSH_ACTIVE_API_KEY:-$OPENAI_API_KEY}"
+
+    if [[ -z "$api_key" && "${ACSH_PROVIDER^^}" != "OLLAMA" ]]; then
+        echo_error "ACSH_ACTIVE_API_KEY not set. Run: autocomplete config (or set OPENAI_API_KEY)"
+        return 1
+    fi
+
+    payload=$(_build_fep_payload "$prompt")
+    max_attempts=2
+    attempt=1
+
+    while [[ $attempt -le $max_attempts ]]; do
+        if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+            response=$(curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+                -H "content-type: application/json" \
+                -H "anthropic-version: 2023-06-01" \
+                -H "x-api-key: $api_key" \
+                --data "$payload")
+        elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+            response=$(curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
+        else
+            response=$(curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+                -H "Content-Type: application/json" \
+                -H "Authorization: Bearer $api_key" \
+                -d "$payload")
+        fi
+        status_code=$(echo "$response" | tail -n1)
+        response_body=$(echo "$response" | sed '$d')
+        if [[ $status_code -eq 200 ]]; then
+            break
+        fi
+        echo_error "API call failed with status $status_code. Retrying... (Attempt $attempt of $max_attempts)" >&2
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+
+    if [[ $status_code -ne 200 ]]; then
+        echo_error "FEP request failed. Status: $status_code"
+        return 1
+    fi
+
+    # Echo full response so caller can parse .message.content or .choices[0].message.content
+    echo "$response_body"
 }
 
 ###############################################################################
@@ -814,7 +994,7 @@ _interactive_autocomplete_widget() {
 show_help() {
     echo_green "Autocomplete.sh - LLM Powered Bash Completion"
     echo "Usage: autocomplete [options] command"
-    echo "       autocomplete [options] install|remove|config|model|enable|disable|safeguard|clear|usage|system|command|--help"
+    echo "       autocomplete [options] install|remove|config|model|enable|disable|safeguard|clear|usage|system|command|fep|--help"
     echo
     echo "Autocomplete.sh enhances bash completion with LLM capabilities."
     echo
@@ -828,6 +1008,7 @@ show_help() {
     echo "Commands:"
     echo "  command             Run autocomplete (simulate double Tab)"
     echo "  command --dry-run   Show prompt without executing"
+    echo "  fep [context]        Fix error please - analyze last failed command and suggest fix (uses configured API/model)"
     echo "  model               Change language model"
     echo "  usage               Display usage stats"
     echo "  system              Display system information"
@@ -1168,6 +1349,7 @@ clear
 usage
 system
 command
+fep
 model
 --help"
     fi
@@ -1277,6 +1459,22 @@ enable_command() {
     # Bind Ctrl+Space to interactive autocomplete widget
     bind -x '"\C-@": _interactive_autocomplete_widget'
 
+    # FEP: capture last command and exit code after each command via PROMPT_COMMAND
+    if [[ "$PROMPT_COMMAND" != *"_acsh_capture_command_result"* ]]; then
+        if [[ -n "$PROMPT_COMMAND" ]]; then
+            PROMPT_COMMAND="_acsh_capture_command_result; $PROMPT_COMMAND"
+        else
+            PROMPT_COMMAND="_acsh_capture_command_result"
+        fi
+        export PROMPT_COMMAND
+    fi
+
+    # FEP shortcut: allow user to just type "fep" instead of "autocomplete fep"
+    fep() {
+        autocomplete fep "$@"
+    }
+    export -f fep
+
     # Enable safeguard for risky commands
     _enable_safeguards
 
@@ -1289,6 +1487,16 @@ disable_command() {
     if check_if_enabled; then
         complete -F _completion_loader -D
     fi
+    # Remove FEP capture from PROMPT_COMMAND
+    if [[ -n "$PROMPT_COMMAND" ]]; then
+        PROMPT_COMMAND="${PROMPT_COMMAND//_acsh_capture_command_result/}"
+        PROMPT_COMMAND="${PROMPT_COMMAND//;;/;}"
+        PROMPT_COMMAND="${PROMPT_COMMAND#;}"
+        PROMPT_COMMAND="${PROMPT_COMMAND%;}"
+        export PROMPT_COMMAND
+    fi
+    # Remove fep shortcut
+    unset -f fep 2>/dev/null
     _disable_safeguards
 }
 
@@ -1757,6 +1965,74 @@ model_command() {
 }
 
 ###############################################################################
+#                    FEP (Fix Error Please) Command                           #
+###############################################################################
+
+fep_command() {
+    acsh_load_config
+    local user_context="${*:2}"
+    local response recommended_cmd explanation content
+
+    echo -e "\e[33mAnalyzing error and generating fix...\e[0m"
+    echo
+
+    response=$(fep_completion "$user_context")
+
+    if [[ -z "$response" ]]; then
+        echo_error "Failed to get response from API. Check config and API key (autocomplete config)."
+        return 1
+    fi
+
+    # Extract message content by provider
+    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+        content=$(echo "$response" | jq -r '.content[0].text // empty')
+    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+        content=$(echo "$response" | jq -r '.message.content // empty')
+    else
+        content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
+    fi
+
+    if [[ -z "$content" ]]; then
+        echo_error "Empty response from model"
+        return 1
+    fi
+
+    recommended_cmd=$(echo "$content" | jq -r '.recommended_command // empty')
+    explanation=$(echo "$content" | jq -r '.explanation // empty')
+
+    if [[ -z "$recommended_cmd" ]]; then
+        echo_error "Could not parse recommendation from response"
+        echo "Raw response: $content"
+        return 1
+    fi
+
+    echo -e "\e[32m━━━ Recommended Command ━━━\e[0m"
+    echo -e "\e[1m$recommended_cmd\e[0m"
+    echo
+    echo -e "\e[32m━━━ Explanation ━━━\e[0m"
+    echo "$explanation"
+    echo
+
+    echo -e "\e[33mRun this command? [Y/n]\e[0m"
+    read -r -n 1 confirm
+    echo
+
+    if [[ "$confirm" =~ ^[Yy]$ ]] || [[ -z "$confirm" ]]; then
+        echo -e "\e[90mExecuting: $recommended_cmd\e[0m"
+        eval "$recommended_cmd"
+    else
+        echo "Cancelled."
+    fi
+}
+
+acsh_run() {
+    local cmd="$*"
+    export ACSH_LAST_COMMAND="$cmd"
+    eval "$cmd" 2>&1 | tee "$ACSH_LAST_OUTPUT_FILE"
+    export ACSH_LAST_EXIT_CODE="${PIPESTATUS[0]}"
+}
+
+###############################################################################
 #                              CLI ENTRY POINT                                #
 ###############################################################################
 
@@ -1796,6 +2072,9 @@ case "$1" in
         ;;
     command)
         command_command "$@"
+        ;;
+    fep)
+        fep_command "$@"
         ;;
     *)
         if [[ -n "$1" ]]; then
