@@ -1,8 +1,9 @@
 mod client;
-mod providers;
+pub mod providers;
 mod prompt;
 
 pub use client::get_completion;
+pub use providers::Provider;
 
 use serde::{Deserialize, Serialize};
 

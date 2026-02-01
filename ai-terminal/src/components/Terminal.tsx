@@ -4,8 +4,38 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import { invoke } from '@tauri-apps/api/core';
 import GhostText from './GhostText';
+import HarmWarning from './HarmWarning';
+import SafeguardConfirm from './SafeguardConfirm';
+import FixSuggestion from './FixSuggestion';
 import { useAutocomplete } from '../hooks/useAutocomplete';
 import 'xterm/css/xterm.css';
+
+interface HarmResult {
+  is_harmful: boolean;
+  reason: string;
+  severity: string;
+}
+
+interface SafeguardResult {
+  is_dangerous: boolean;
+  matched_pattern: string | null;
+  description: string;
+  severity: string;
+}
+
+interface FixSuggestionData {
+  fixed_command: string;
+  explanation: string;
+  confidence: string;
+}
+
+interface ErrorContext {
+  command: string;
+  exit_code: number;
+  output: string;
+  cwd: string;
+  history: string[];
+}
 
 interface TerminalProps {
   className?: string;
@@ -15,14 +45,32 @@ export default function Terminal({ className }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const isMountedRef = useRef(true); // Track if component is mounted
+  const isMountedRef = useRef(true);
   const [isConnected, setIsConnected] = useState(false);
-  const isConnectedRef = useRef(false); // Ref to avoid stale closure issues
+  const isConnectedRef = useRef(false);
   const [currentInput, setCurrentInput] = useState('');
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 });
   const inputBufferRef = useRef('');
   const readIntervalRef = useRef<number | null>(null);
-  const { suggestion, isLoading, clearSuggestion } = useAutocomplete(currentInput);
+  const { suggestion, explanation, isLoading, clearSuggestion } = useAutocomplete(currentInput);
+  
+  // New state for safety features
+  const [showHarmWarning, setShowHarmWarning] = useState(false);
+  const [harmResult, setHarmResult] = useState<HarmResult | null>(null);
+  const [pendingCommand, setPendingCommand] = useState<string | null>(null);
+  
+  const [showSafeguardConfirm, setShowSafeguardConfirm] = useState(false);
+  const [safeguardResult, setSafeguardResult] = useState<SafeguardResult | null>(null);
+  const safeguardsDisabledForSession = useRef(false);
+  
+  const [showFixSuggestion, setShowFixSuggestion] = useState(false);
+  const [fixSuggestion, setFixSuggestion] = useState<FixSuggestionData | null>(null);
+  const [lastErrorContext, setLastErrorContext] = useState<ErrorContext | null>(null);
+  const [isLoadingFix, setIsLoadingFix] = useState(false);
+  
+  // Track last command for error detection
+  const lastExecutedCommand = useRef<string>('');
+  const outputBuffer = useRef<string>('');
   
   // Ref to hold the latest input handler - start with a basic forwarder
   const inputHandlerRef = useRef<(data: string) => Promise<void>>(async (data: string) => {
@@ -150,6 +198,15 @@ export default function Terminal({ className }: TerminalProps) {
               console.error('xtermRef.current is null!');
             }
             
+            // Capture output for error detection
+            if (lastExecutedCommand.current) {
+              outputBuffer.current += output;
+              // Keep buffer limited
+              if (outputBuffer.current.length > 10000) {
+                outputBuffer.current = outputBuffer.current.slice(-10000);
+              }
+            }
+            
             // Mark as connected once we get first output (shell prompt)
             if (!isConnectedRef.current) {
               console.log('First output received, marking as connected');
@@ -158,8 +215,31 @@ export default function Terminal({ className }: TerminalProps) {
             }
             
             // Try to detect command completion (prompt returned)
-            if (output.includes('\n') || output.includes('\r')) {
-              // Command might have been executed, clear input buffer
+            // Look for common prompt patterns that indicate command finished
+            const promptPatterns = [/\$\s*$/, />\s*$/, /#\s*$/, /PS.*>\s*$/];
+            const hasPrompt = promptPatterns.some(pattern => pattern.test(output));
+            
+            if (hasPrompt && lastExecutedCommand.current) {
+              // Check for error indicators in output
+              const errorIndicators = ['error', 'Error', 'ERROR', 'failed', 'Failed', 'not found', 'No such file', 'Permission denied', 'command not found'];
+              const hasError = errorIndicators.some(indicator => outputBuffer.current.includes(indicator));
+              
+              if (hasError) {
+                // Store error context for FEP
+                setLastErrorContext({
+                  command: lastExecutedCommand.current,
+                  exit_code: 1, // Assumed - we can't easily get real exit code in this flow
+                  output: outputBuffer.current,
+                  cwd: '',
+                  history: [],
+                });
+              } else {
+                setLastErrorContext(null);
+              }
+              
+              // Reset tracking
+              lastExecutedCommand.current = '';
+              outputBuffer.current = '';
               inputBufferRef.current = '';
               setCurrentInput('');
               clearSuggestion();
@@ -199,6 +279,112 @@ export default function Terminal({ className }: TerminalProps) {
     }
   };
 
+  // Check command safety before execution
+  const checkCommandSafety = async (command: string): Promise<boolean> => {
+    // Check pattern-based safeguard first (fast, local)
+    if (!safeguardsDisabledForSession.current) {
+      try {
+        const safeguard = await invoke<SafeguardResult>('check_safeguard', { command });
+        if (safeguard.is_dangerous) {
+          setPendingCommand(command);
+          setSafeguardResult(safeguard);
+          setShowSafeguardConfirm(true);
+          return false;
+        }
+      } catch (err) {
+        console.error('Safeguard check failed:', err);
+      }
+    }
+    
+    // Check LLM-based harm detection (slower, more intelligent)
+    try {
+      const harm = await invoke<HarmResult>('check_command_harm', { command });
+      if (harm.is_harmful) {
+        setPendingCommand(command);
+        setHarmResult(harm);
+        setShowHarmWarning(true);
+        return false;
+      }
+    } catch (err) {
+      console.error('Harm check failed:', err);
+      // Fail safe - allow execution if check fails
+    }
+    
+    return true;
+  };
+
+  // Execute the pending command after user confirmation
+  const executePendingCommand = async () => {
+    if (pendingCommand) {
+      lastExecutedCommand.current = pendingCommand;
+      await invoke('add_to_history', { command: pendingCommand });
+      await invoke('write_to_pty', { data: '\r' });
+    }
+    setPendingCommand(null);
+    setShowHarmWarning(false);
+    setShowSafeguardConfirm(false);
+    setHarmResult(null);
+    setSafeguardResult(null);
+    inputBufferRef.current = '';
+    setCurrentInput('');
+    clearSuggestion();
+  };
+
+  // Cancel the pending command
+  const cancelPendingCommand = () => {
+    setPendingCommand(null);
+    setShowHarmWarning(false);
+    setShowSafeguardConfirm(false);
+    setHarmResult(null);
+    setSafeguardResult(null);
+    // Clear the input line in terminal
+    if (xtermRef.current) {
+      xtermRef.current.write('\x1b[2K\r'); // Clear line
+    }
+    inputBufferRef.current = '';
+    setCurrentInput('');
+    clearSuggestion();
+  };
+
+  // Handle FEP (Fix Error Please)
+  const handleFixError = async () => {
+    if (!lastErrorContext) return;
+    
+    setIsLoadingFix(true);
+    setShowFixSuggestion(true);
+    
+    try {
+      const fix = await invoke<FixSuggestionData>('get_error_fix', {
+        command: lastErrorContext.command,
+        exitCode: lastErrorContext.exit_code,
+        output: lastErrorContext.output,
+      });
+      setFixSuggestion(fix);
+    } catch (err) {
+      console.error('Failed to get fix:', err);
+      setFixSuggestion({
+        fixed_command: '',
+        explanation: 'Failed to analyze the error. Please try again.',
+        confidence: 'low',
+      });
+    } finally {
+      setIsLoadingFix(false);
+    }
+  };
+
+  // Apply the suggested fix
+  const applyFix = async (fixedCommand: string) => {
+    setShowFixSuggestion(false);
+    setFixSuggestion(null);
+    
+    if (fixedCommand && xtermRef.current) {
+      // Type the fixed command
+      inputBufferRef.current = fixedCommand;
+      setCurrentInput(fixedCommand);
+      await invoke('write_to_pty', { data: fixedCommand });
+    }
+  };
+
   // Input handler - defined inline and kept in ref so xterm.onData always uses the latest version
   const handleTerminalInput = useCallback(async (data: string) => {
     console.log('Input received:', data.length, 'chars, code:', data.charCodeAt(0));
@@ -206,9 +392,16 @@ export default function Terminal({ className }: TerminalProps) {
     // Check for special keys
     const code = data.charCodeAt(0);
     
+    // Ctrl+F - Fix error (FEP)
+    if (code === 6) {
+      if (lastErrorContext) {
+        handleFixError();
+      }
+      return;
+    }
+    
     // Tab key - accept suggestion
     if (code === 9 && suggestion) {
-      // Insert the suggestion
       await invoke('write_to_pty', { data: suggestion });
       inputBufferRef.current += suggestion;
       setCurrentInput(inputBufferRef.current);
@@ -225,16 +418,34 @@ export default function Terminal({ className }: TerminalProps) {
       return;
     }
     
-    // Escape - clear suggestion
-    if (code === 27 && suggestion) {
-      clearSuggestion();
+    // Escape - clear suggestion or dismiss modals
+    if (code === 27) {
+      if (suggestion) {
+        clearSuggestion();
+      }
+      if (showFixSuggestion) {
+        setShowFixSuggestion(false);
+        setFixSuggestion(null);
+      }
+      return;
     }
     
-    // Enter key - execute command
+    // Enter key - execute command with safety checks
     if (code === 13) {
-      // Add to history
-      if (inputBufferRef.current.trim()) {
-        await invoke('add_to_history', { command: inputBufferRef.current.trim() });
+      const command = inputBufferRef.current.trim();
+      if (command) {
+        // Store command for potential FEP
+        lastExecutedCommand.current = command;
+        outputBuffer.current = '';
+        
+        // Check safety before execution
+        const isSafe = await checkCommandSafety(command);
+        if (!isSafe) {
+          // Command blocked - don't send Enter to PTY
+          return;
+        }
+        
+        await invoke('add_to_history', { command });
       }
       inputBufferRef.current = '';
       setCurrentInput('');
@@ -250,6 +461,7 @@ export default function Terminal({ className }: TerminalProps) {
       inputBufferRef.current = '';
       setCurrentInput('');
       clearSuggestion();
+      lastExecutedCommand.current = '';
     }
     // Ctrl+U - clear line
     else if (code === 21) {
@@ -270,7 +482,7 @@ export default function Terminal({ className }: TerminalProps) {
     } catch (err) {
       console.error('Write error:', err);
     }
-  }, [suggestion, clearSuggestion]);
+  }, [suggestion, clearSuggestion, showFixSuggestion, lastErrorContext]);
 
   // Keep the ref updated with the latest handler
   useEffect(() => {
@@ -307,8 +519,41 @@ export default function Terminal({ className }: TerminalProps) {
       {suggestion && !isLoading && (
         <GhostText 
           text={suggestion}
+          explanation={explanation}
           position={cursorPosition}
           fontSize={xtermRef.current?.options.fontSize || 14}
+        />
+      )}
+      
+      {/* Harm Warning Modal */}
+      {showHarmWarning && harmResult && pendingCommand && (
+        <HarmWarning
+          command={pendingCommand}
+          harmResult={harmResult}
+          onProceed={executePendingCommand}
+          onCancel={cancelPendingCommand}
+        />
+      )}
+      
+      {/* Safeguard Confirmation Modal */}
+      {showSafeguardConfirm && safeguardResult && pendingCommand && (
+        <SafeguardConfirm
+          command={pendingCommand}
+          safeguardResult={safeguardResult}
+          onProceed={executePendingCommand}
+          onCancel={cancelPendingCommand}
+          onDisableForSession={() => { safeguardsDisabledForSession.current = true; }}
+        />
+      )}
+      
+      {/* Fix Suggestion Modal */}
+      {showFixSuggestion && lastErrorContext && (
+        <FixSuggestion
+          errorContext={lastErrorContext}
+          suggestion={fixSuggestion || { fixed_command: '', explanation: '', confidence: 'low' }}
+          onApply={applyFix}
+          onDismiss={() => { setShowFixSuggestion(false); setFixSuggestion(null); }}
+          isLoading={isLoadingFix}
         />
       )}
       
@@ -321,6 +566,12 @@ export default function Terminal({ className }: TerminalProps) {
           <div className="status-item">
             <span className="status-dot loading" />
             <span>Getting suggestion...</span>
+          </div>
+        )}
+        {lastErrorContext && (
+          <div className="status-item error-hint" onClick={handleFixError}>
+            <span className="status-dot error" />
+            <span>Error detected - Press Ctrl+F to fix</span>
           </div>
         )}
         {currentInput && (

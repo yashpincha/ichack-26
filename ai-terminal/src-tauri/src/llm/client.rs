@@ -3,9 +3,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::config::AppConfig;
-use crate::context::TerminalContext;
+use crate::context::{TerminalContext, build_prompt_with_explanation};
 use super::providers::Provider;
-use super::prompt::{build_system_prompt, build_user_prompt};
+use super::prompt::build_system_prompt;
 use super::Suggestion;
 
 const REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -56,6 +56,14 @@ pub async fn get_completion(
     config: &AppConfig,
     ctx: &TerminalContext,
 ) -> Result<Suggestion, String> {
+    get_completion_with_options(config, ctx, config.show_explanations).await
+}
+
+pub async fn get_completion_with_options(
+    config: &AppConfig,
+    ctx: &TerminalContext,
+    include_explanation: bool,
+) -> Result<Suggestion, String> {
     let provider = Provider::from_str(&config.provider);
     
     // Check API key requirement
@@ -82,7 +90,7 @@ pub async fn get_completion(
         .map_err(|e| e.to_string())?;
     
     let system_prompt = build_system_prompt();
-    let user_prompt = build_user_prompt(ctx);
+    let user_prompt = build_prompt_with_explanation(ctx, include_explanation);
     
     let response = match provider {
         Provider::OpenAI | Provider::Groq => {
@@ -96,15 +104,21 @@ pub async fn get_completion(
         }
     };
     
-    // Clean up the response
-    let completion = response
-        .trim()
-        .trim_matches('"')
-        .trim_matches('`')
-        .to_string();
+    // Parse response - check for explanation format (completion|||explanation)
+    let cleaned = response.trim().trim_matches('"').trim_matches('`');
+    
+    if include_explanation && cleaned.contains("|||") {
+        let parts: Vec<&str> = cleaned.splitn(2, "|||").collect();
+        if parts.len() == 2 {
+            return Ok(Suggestion {
+                completion: parts[0].trim().to_string(),
+                explanation: Some(parts[1].trim().to_string()),
+            });
+        }
+    }
     
     Ok(Suggestion {
-        completion,
+        completion: cleaned.to_string(),
         explanation: None,
     })
 }

@@ -56,8 +56,8 @@ fn sanitize_command(cmd: &str) -> String {
     result
 }
 
-/// Build the prompt for the LLM
-pub fn build_prompt(ctx: &TerminalContext) -> String {
+/// Build the prompt for the LLM with optional explanation
+pub fn build_prompt_with_explanation(ctx: &TerminalContext, include_explanation: bool) -> String {
     let sanitized_history = ctx.get_sanitized_history();
     let history_str = if sanitized_history.is_empty() {
         "No recent commands".to_string()
@@ -75,6 +75,17 @@ pub fn build_prompt(ctx: &TerminalContext) -> String {
         "None".to_string()
     } else {
         env_vars.join(", ")
+    };
+    
+    let output_format = if include_explanation {
+        r#"Output format: completion|||explanation
+Where:
+- completion: The text to complete the command
+- explanation: A brief (max 60 chars) explanation of why this suggestion was made
+
+Example: eckout main|||Switch to the main branch"#
+    } else {
+        "Return ONLY the completion text that should appear after the cursor - do not repeat what the user has already typed.\nIf the input appears complete or you cannot suggest anything useful, return an empty string."
     };
     
     format!(
@@ -95,8 +106,7 @@ Provide the SINGLE BEST completion for the user's current input. The completion 
 2. Be a valid shell command
 3. Consider the context (directory, history, common patterns)
 
-Return ONLY the completion text that should appear after the cursor - do not repeat what the user has already typed.
-If the input appears complete or you cannot suggest anything useful, return an empty string.
+{}
 
 Examples:
 - Input: "git ch" -> Completion: "eckout "
@@ -106,7 +116,8 @@ Examples:
         ctx.current_input,
         ctx.cwd,
         env_str,
-        history_str
+        history_str,
+        output_format
     )
 }
 

@@ -13,6 +13,17 @@ pub struct AppConfig {
     pub temperature: f32,
     pub max_suggestions: u32,
     pub max_history_commands: u32,
+    // Safety features
+    #[serde(default = "default_true")]
+    pub safeguards_enabled: bool,
+    #[serde(default = "default_true")]
+    pub harm_detection_enabled: bool,
+    #[serde(default = "default_true")]
+    pub show_explanations: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AppConfig {
@@ -27,6 +38,9 @@ impl Default for AppConfig {
             temperature: 0.0,
             max_suggestions: 1,
             max_history_commands: 20,
+            safeguards_enabled: true,
+            harm_detection_enabled: true,
+            show_explanations: true,
         }
     }
 }
