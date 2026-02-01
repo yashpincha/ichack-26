@@ -47,6 +47,39 @@ autocomplete command --dry-run "your command here"
 
 ## Tips and Tricks
 
+### **Interactive Autocompletion**
+Receive AI-assisted autocompletions, right in the terminal!
+
+Use **Ctrl+Space** to enter an interactive session. Use `--explain` to receive short explanations for each autocompletion.
+Navigate between suggestions using your keyboard.
+
+```
+$ ls # with file sizes in human-readable format
+
+Generating suggestions...
+
+╔════════════════════════════════════════════════════════════════════╗
+║  Autocomplete Suggestions                                        ║
+╠════════════════════════════════════════════════════════════════════╣
+║  Use ↑/↓ to navigate, Enter to execute, Esc to cancel          ║
+╚════════════════════════════════════════════════════════════════════╝
+
+  ▶ ls -lh
+    List files with sizes in human-readable format.
+
+    ls -lhS
+    List files by size, human-readable format.
+
+    ls -lh --color=auto
+    List files with color, human-readable sizes.
+
+    ls -lh --group-directories-first
+    List files with dirs first, human-readable sizes.
+
+    ls -lh --time-style=long-iso
+    List files with long ISO date, human-readable sizes.
+```
+
 
 ### 🛡️ **Two-Layer Safety System**
 Never accidentally run a dangerous command again.
