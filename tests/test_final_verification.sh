@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "================================"
 echo "Final Verification Tests"
 echo "================================"
@@ -8,13 +11,13 @@ echo
 # Test 1: Verify detect_command_harm works
 echo "Test 1: Testing detect_command_harm function"
 echo "---"
-source ../autocomplete.sh > /dev/null 2>&1
-result=$(detect_command_harm "rm -rf /" 2>&1)
+source "$SCRIPT_DIR/../autocomplete.sh" > /dev/null 2>&1
+result=$(detect_command_harm "rm -rf /")
 is_harmful=$(echo "$result" | jq -r '.is_harmful' 2>/dev/null)
 
 if [ "$is_harmful" == "true" ]; then
     echo "✓ PASS: Harmful command correctly detected"
-    echo "  Result: $(echo "$result" | jq -r '.risk_level') - $(echo "$result" | jq -r '.explanation')"
+    echo "  Result: $(echo "$result" | jq -r '.explanation')"
 else
     echo "✗ FAIL: Harmful command not detected"
 fi
@@ -23,12 +26,12 @@ echo
 # Test 2: Verify safe commands are allowed
 echo "Test 2: Testing safe command"
 echo "---"
-result=$(detect_command_harm "ls -la" 2>&1)
+result=$(detect_command_harm "ls -la")
 is_harmful=$(echo "$result" | jq -r '.is_harmful' 2>/dev/null)
 
 if [ "$is_harmful" == "false" ]; then
     echo "✓ PASS: Safe command correctly identified"
-    echo "  Result: $(echo "$result" | jq -r '.risk_level') - $(echo "$result" | jq -r '.explanation')"
+    echo "  Result: $(echo "$result" | jq -r '.explanation')"
 else
     echo "✗ FAIL: Safe command incorrectly flagged"
 fi

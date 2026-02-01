@@ -1,11 +1,14 @@
 #!/bin/bash
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Create test file
 mkdir -p /tmp/test_dir
 echo "test" > /tmp/test_dir/testfile.txt
 
 # Source and enable autocomplete
-source /home/aryagolkari/events/ichack-26/autocomplete.sh > /dev/null 2>&1
+source "$SCRIPT_DIR/../autocomplete.sh" > /dev/null 2>&1
 autocomplete enable > /dev/null 2>&1
 
 echo "Test 1: Safe command (should execute without warning)"

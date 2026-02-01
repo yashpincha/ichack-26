@@ -1,7 +1,10 @@
 #!/bin/bash
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Source and enable autocomplete
-source /home/aryagolkari/events/ichack-26/autocomplete.sh > /dev/null 2>&1
+source "$SCRIPT_DIR/../autocomplete.sh" > /dev/null 2>&1
 autocomplete enable > /dev/null 2>&1
 
 echo "Testing harm detection with dangerous command..."

@@ -814,7 +814,7 @@ _interactive_autocomplete_widget() {
 show_help() {
     echo_green "Autocomplete.sh - LLM Powered Bash Completion"
     echo "Usage: autocomplete [options] command"
-    echo "       autocomplete [options] install|remove|config|model|enable|disable|clear|usage|system|command|--help"
+    echo "       autocomplete [options] install|remove|config|model|enable|disable|safeguard|clear|usage|system|command|--help"
     echo
     echo "Autocomplete.sh enhances bash completion with LLM capabilities."
     echo
@@ -838,6 +838,10 @@ show_help() {
     echo "  remove              Remove installation from .bashrc"
     echo "  enable              Enable autocomplete"
     echo "  disable             Disable autocomplete"
+    echo "  safeguard <action>  Manage harmful command detection"
+    echo "    enable            Enable safeguards"
+    echo "    disable           Disable safeguards"
+    echo "    status            Show safeguard status"
     echo "  clear               Clear cache and log files"
     echo "  --help              Show this help message"
     echo
@@ -1147,6 +1151,11 @@ reset"
     elif [[ $current == "command" ]]; then
         readarray -t COMPREPLY <<< "command --dry-run"
         return
+    elif [[ $current == "safeguard" ]]; then
+        readarray -t COMPREPLY <<< "enable
+disable
+status"
+        return
     fi
     if [[ -z "$current" ]]; then
         readarray -t COMPREPLY <<< "install
@@ -1154,6 +1163,7 @@ remove
 config
 enable
 disable
+safeguard
 clear
 usage
 system
@@ -1167,6 +1177,17 @@ _check_command_with_safeguard() {
     local cmd_name="$1"
     shift
     local full_cmd="$cmd_name $*"
+
+    # Check if safeguards are enabled - read directly from config file
+    local config_file="$HOME/.autocomplete/config"
+    local safeguards_enabled="true"  # default
+    if [ -f "$config_file" ]; then
+        safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
+        [[ -z "$safeguards_enabled" ]] && safeguards_enabled="true"
+    fi
+    if [[ "$safeguards_enabled" != "true" ]]; then
+        return 0
+    fi
 
     # Prevent infinite recursion - skip check if already inside safeguard
     if [[ -n "${_ACSH_IN_SAFEGUARD:-}" ]]; then
@@ -1329,6 +1350,70 @@ clear_command() {
 
     # Clear log file
     [ -f "$log_file" ] && { rm "$log_file"; echo "Removed: $log_file"; }
+}
+
+safeguard_command() {
+    local action="$1"
+    local config_file="$HOME/.autocomplete/config"
+
+    case "$action" in
+        enable)
+            if [ -f "$config_file" ]; then
+                # Check if line exists, if not add it
+                if ! grep -q "^harm_detection_enabled:" "$config_file"; then
+                    echo "" >> "$config_file"
+                    echo "# Harm detection settings" >> "$config_file"
+                    echo "harm_detection_enabled: true" >> "$config_file"
+                else
+                    # Update existing line
+                    sed -i 's/^harm_detection_enabled:.*/harm_detection_enabled: true/' "$config_file"
+                fi
+                echo_green "Safeguards enabled!"
+                echo -e "\e[90mHarmful commands will now require confirmation before execution.\e[0m"
+                echo -e "\e[90mChanges take effect immediately.\e[0m"
+            else
+                echo_error "Configuration file not found: $config_file"
+            fi
+            ;;
+        disable)
+            if [ -f "$config_file" ]; then
+                # Check if line exists, if not add it
+                if ! grep -q "^harm_detection_enabled:" "$config_file"; then
+                    echo "" >> "$config_file"
+                    echo "# Harm detection settings" >> "$config_file"
+                    echo "harm_detection_enabled: false" >> "$config_file"
+                else
+                    # Update existing line
+                    sed -i 's/^harm_detection_enabled:.*/harm_detection_enabled: false/' "$config_file"
+                fi
+                echo_green "Safeguards disabled!"
+                echo -e "\e[90mCommands will execute without harm detection checks.\e[0m"
+                echo -e "\e[90mChanges take effect immediately.\e[0m"
+            else
+                echo_error "Configuration file not found: $config_file"
+            fi
+            ;;
+        status)
+            local status="true"  # default
+            if [ -f "$config_file" ]; then
+                # Read directly from config file
+                status=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
+                # If not found in config, use default
+                [[ -z "$status" ]] && status="true"
+            fi
+            if [ "$status" = "true" ]; then
+                echo -e "Safeguards: \e[1;32menabled\e[0m"
+            else
+                echo -e "Safeguards: \e[1;31mdisabled\e[0m"
+            fi
+            ;;
+        *)
+            echo "Usage: autocomplete safeguard <enable|disable|status>"
+            echo "  enable  - Enable harmful command detection"
+            echo "  disable - Disable harmful command detection"
+            echo "  status  - Show current safeguard status"
+            ;;
+    esac
 }
 
 usage_command() {
@@ -1498,22 +1583,31 @@ _interactive_completion_menu() {
                 clear_menu
                 local selected_cmd="${options[selected]}"
 
-                # Detect harm using LLM
-                local harm_data is_harmful explanation
-                harm_data=$(detect_command_harm "$selected_cmd")
-                is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
-                explanation=$(echo "$harm_data" | jq -r '.explanation')
+                # Detect harm using LLM (if safeguards are enabled)
+                # Read directly from config file for immediate effect
+                local config_file="$HOME/.autocomplete/config"
+                local safeguards_enabled="true"  # default
+                if [ -f "$config_file" ]; then
+                    safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
+                    [[ -z "$safeguards_enabled" ]] && safeguards_enabled="true"
+                fi
+                if [[ "$safeguards_enabled" == "true" ]]; then
+                    local harm_data is_harmful explanation
+                    harm_data=$(detect_command_harm "$selected_cmd")
+                    is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
+                    explanation=$(echo "$harm_data" | jq -r '.explanation')
 
-                if [[ "$is_harmful" == "true" ]]; then
-                    echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
-                    echo -e "\e[1;32m▶ Command:\e[0m $selected_cmd"
-                    echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
-                    echo
-                    read -p "Are you sure you want to continue? (y/N): " -n 1 -r
-                    echo
-                    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-                        echo -e "\e[90mCommand cancelled.\e[0m"
-                        return 1
+                    if [[ "$is_harmful" == "true" ]]; then
+                        echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
+                        echo -e "\e[1;32m▶ Command:\e[0m $selected_cmd"
+                        echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
+                        echo
+                        read -p "Are you sure you want to continue? (y/N): " -n 1 -r
+                        echo
+                        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                            echo -e "\e[90mCommand cancelled.\e[0m"
+                            return 1
+                        fi
                     fi
                 fi
 
@@ -1681,6 +1775,9 @@ case "$1" in
         ;;
     clear)
         clear_command
+        ;;
+    safeguard)
+        safeguard_command "$2"
         ;;
     usage)
         usage_command
