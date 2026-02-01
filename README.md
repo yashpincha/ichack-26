@@ -7,8 +7,6 @@
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](https://github.com/yashpincha/ichack-26)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/yashpincha/ichack-26/releases)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/yashpincha/ichack-26)
-[![Made with Tauri](https://img.shields.io/badge/made%20with-Tauri-orange?style=flat-square)](https://tauri.app)
 [![ICHack '26](https://img.shields.io/badge/ICHack-'26-purple?style=flat-square)](https://ichack.org)
 
 **Type less. Do more. Stay safe.**
