@@ -8,7 +8,7 @@ Do you remember your first `git push --force`, `sudo rm -rf`, `chown -R root:roo
 
  Most tools try to be helpful all the time, but most users don't need the noice, setup and cognitive load. We asked Clammy to solve a simpler question. What is the smallest help that actually works?
 
-I would like to introduce to you:
+We would like to introduce to you:
 
 clam
 
