@@ -381,16 +381,17 @@ openai_completion() {
     max_attempts=2
     attempt=1
     while [ $attempt -le $max_attempts ]; do
+        # Use 'command' to bypass wrapper functions and prevent infinite recursion
         if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
-            response=$(\curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "content-type: application/json" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "x-api-key: $api_key" \
                 --data "$payload")
         elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
-            response=$(\curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
+            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
         else
-            response=$(\curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "Content-Type: application/json" \
                 -H "Authorization: Bearer $api_key" \
                 -d "$payload")
@@ -441,6 +442,187 @@ openai_completion() {
     fi
     echo -n "$completions"
     log_request "$user_input" "$response_body"
+}
+
+###############################################################################
+#                        Harm Detection Functions                             #
+###############################################################################
+
+_build_harm_detection_payload() {
+    local command="$1"
+    local model temperature system_prompt prompt_content
+
+    model="${ACSH_MODEL:-gpt-4o}"
+    temperature="0.0"  # Use deterministic responses for safety checks
+
+    system_prompt="You are a bash command security analyzer. Your role is to identify potentially harmful bash commands that could cause data loss, system damage, security risks, or unintended consequences. Analyze commands for: destructive file operations, system modifications, permission changes, network security risks, resource consumption attacks, and dangerous command chaining."
+
+    prompt_content="Analyze this bash command for potential harm:
+
+Command: $command
+
+Classify this command and respond with ONLY a JSON object in this exact format:
+{
+  \"is_harmful\": true or false,
+  \"explanation\": \"Brief explanation of why this command is harmful or safe (max 100 chars)\"
+}"
+
+    local base_payload
+    base_payload=$(jq -n --arg model "$model" \
+                         --arg temperature "$temperature" \
+                         --arg system_prompt "$system_prompt" \
+                         --arg prompt_content "$prompt_content" \
+                         '{
+                            model: $model,
+                            messages: [
+                              {role: "system", content: $system_prompt},
+                              {role: "user", content: $prompt_content}
+                            ],
+                            temperature: ($temperature | tonumber)
+                          }')
+
+    local payload
+    case "${ACSH_PROVIDER^^}" in
+        "ANTHROPIC")
+            payload=$(echo "$base_payload" | jq '. + {
+                system: .messages[0].content,
+                messages: [{role:"user", content: .messages[1].content}],
+                max_tokens: 512,
+                tool_choice: {type: "tool", name: "harm_assessment"},
+                tools: [{
+                    name: "harm_assessment",
+                    description: "Assess if a bash command is potentially harmful",
+                    input_schema: {
+                        type: "object",
+                        properties: {
+                            is_harmful: {type: "boolean", description: "Whether the command is harmful"},
+                            explanation: {type: "string", description: "Brief explanation of the assessment"}
+                        },
+                        required: ["is_harmful", "explanation"]
+                    }
+                }]
+            }')
+            ;;
+        "GROQ")
+            payload=$(echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}')
+            ;;
+        "OLLAMA")
+            payload=$(echo "$base_payload" | jq '. + {
+                format: "json",
+                stream: false,
+                options: {temperature: 0.0}
+            }')
+            ;;
+        *)
+            # OpenAI default - use function calling
+            payload=$(echo "$base_payload" | jq '. + {
+                tools: [{
+                    type: "function",
+                    function: {
+                        name: "harm_assessment",
+                        description: "Assess if a bash command is potentially harmful",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                is_harmful: {type: "boolean", description: "Whether the command is harmful"},
+                                explanation: {type: "string", description: "Brief explanation"}
+                            },
+                            required: ["is_harmful", "explanation"]
+                        }
+                    }
+                }],
+                tool_choice: {type: "function", function: {name: "harm_assessment"}}
+            }')
+            ;;
+    esac
+    echo "$payload"
+}
+
+detect_command_harm() {
+    local command="$1"
+    local command_hash cache_file cache_dir harm_response
+
+    # Load configuration to ensure API keys are set
+    acsh_load_config
+
+    # Generate cache hash
+    command_hash=$(echo -n "$command" | md5sum | cut -d ' ' -f 1)
+    cache_dir="${ACSH_HARM_CACHE_DIR:-$HOME/.autocomplete/harm_cache}"
+    cache_file="$cache_dir/harm-$command_hash.json"
+
+    # Check cache first (instant return)
+    if [[ -d "$cache_dir" && -f "$cache_file" ]]; then
+        cat "$cache_file"
+        return 0
+    fi
+
+    # Build and send API request
+    local payload endpoint timeout api_key response status_code response_body
+
+    endpoint=${ACSH_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
+    timeout=${ACSH_HARM_TIMEOUT:-3}
+    api_key="${ACSH_ACTIVE_API_KEY:-$OPENAI_API_KEY}"
+
+    payload=$(_build_harm_detection_payload "$command")
+
+    # Debug: notify that we're making an API request
+    echo -e "\e[90m[DEBUG] Submitting API request to check command harm: $command\e[0m" >&2
+
+    # Call API with short timeout for harm detection
+    # Use 'command' to bypass wrapper functions and prevent infinite recursion
+    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            -H "content-type: application/json" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "x-api-key: $api_key" \
+            --data "$payload")
+    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
+    else
+        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $api_key" \
+            -d "$payload")
+    fi
+
+    status_code=$(echo "$response" | tail -n1)
+    response_body=$(echo "$response" | sed '$d')
+
+    # Handle API failure - default to safe (fail open)
+    if [[ $status_code -ne 200 ]]; then
+        echo_error "Harm detection API call failed with status $status_code. Allowing command execution." >&2
+        echo '{"is_harmful":false,"explanation":"API unavailable - defaulting to safe"}'
+        return 0
+    fi
+
+    # Parse response based on provider
+    local harm_data
+    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+        harm_data=$(echo "$response_body" | jq -r '.content[0].input')
+    elif [[ "${ACSH_PROVIDER^^}" == "GROQ" ]]; then
+        harm_data=$(echo "$response_body" | jq -r '.choices[0].message.content')
+    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+        harm_data=$(echo "$response_body" | jq -r '.message.content')
+    else
+        # OpenAI function calling - arguments is a JSON string that needs parsing
+        local arguments_string
+        arguments_string=$(echo "$response_body" | jq -r '.choices[0].message.tool_calls[0].function.arguments // .choices[0].message.content')
+        # Parse the JSON string to get the actual JSON object
+        harm_data=$(echo "$arguments_string" | jq -c '.')
+    fi
+
+    # Validate JSON structure - if malformed, default to safe
+    if ! echo "$harm_data" | jq -e 'has("is_harmful")' &>/dev/null; then
+        echo_error "Malformed harm detection response. Allowing command execution." >&2
+        echo '{"is_harmful":false,"explanation":"Malformed response - defaulting to safe"}'
+        return 0
+    fi
+
+    # Cache the result
+    mkdir -p "$cache_dir"
+    echo "$harm_data" > "$cache_file"
+
+    echo "$harm_data"
 }
 
 ###############################################################################
@@ -640,6 +822,8 @@ show_help() {
     echo "  - Press Tab twice for suggestions (standard completion)"
     echo "  - Press Ctrl+Space for interactive menu (navigate with ↑/↓, Enter to execute)"
     echo "  - Add '--explain' to your command to show explanations in the interactive menu"
+    echo "  - AI-powered safeguards detect harmful commands and require confirmation"
+    echo "  - Harm assessments are cached for instant feedback on repeated commands"
     echo
     echo "Commands:"
     echo "  command             Run autocomplete (simulate double Tab)"
@@ -817,7 +1001,13 @@ cache_dir: $HOME/.autocomplete/cache
 cache_size: 10
 
 # Logging settings
-log_file: $HOME/.autocomplete/autocomplete.log"
+log_file: $HOME/.autocomplete/autocomplete.log
+
+# Harm detection settings
+harm_detection_enabled: true
+harm_cache_dir: $HOME/.autocomplete/harm_cache
+harm_cache_size: 100
+harm_timeout: 3"
         echo "$default_config" > "$config_file"
     fi
 }
@@ -973,35 +1163,86 @@ model
     fi
 }
 
-_enable_safeguards() {
-    # Save original rm command if not already saved
-    if ! type -t _original_rm &>/dev/null; then
-        eval "$(echo "_original_rm() { $(type -p rm) \"\$@\"; }")"
+_check_command_with_safeguard() {
+    local cmd_name="$1"
+    shift
+    local full_cmd="$cmd_name $*"
+
+    # Prevent infinite recursion - skip check if already inside safeguard
+    if [[ -n "${_ACSH_IN_SAFEGUARD:-}" ]]; then
+        return 0
     fi
 
-    # Create safeguard wrapper for rm
-    rm() {
-        local cmd_string="rm $*"
-        echo -e "\e[1;33m⚠ WARNING: 'rm' is irreversible and will permanently delete files.\e[0m"
-        echo -e "\e[1;32m▶ Command:\e[0m $cmd_string"
+    # Set flag to prevent re-entry
+    export _ACSH_IN_SAFEGUARD=1
+
+    # Check for harm using LLM
+    local harm_data is_harmful explanation
+    harm_data=$(detect_command_harm "$full_cmd")
+    is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
+    explanation=$(echo "$harm_data" | jq -r '.explanation')
+
+    # Clear flag before prompting user (so user commands work normally)
+    unset _ACSH_IN_SAFEGUARD
+
+    if [[ "$is_harmful" == "true" ]]; then
+        echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
+        echo -e "\e[1;32m▶ Command:\e[0m $full_cmd"
+        echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
         echo
         read -p "Are you sure you want to continue? (y/N): " -n 1 -r
         echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
-            _original_rm "$@"
-        else
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             echo -e "\e[90mCommand cancelled.\e[0m"
             return 1
         fi
-    }
-    export -f rm
+    fi
+    return 0
+}
+
+_enable_safeguards() {
+    # Save original commands if not already saved
+    local risky_commands=("rm" "dd" "mkfs" "shutdown" "reboot" "chmod" "chown" "curl" "wget")
+
+    for cmd in "${risky_commands[@]}"; do
+        local cmd_path
+        cmd_path=$(type -p "$cmd" 2>/dev/null)
+
+        # Only wrap if command exists and isn't already wrapped
+        if [[ -n "$cmd_path" ]] && ! type -t "_original_$cmd" &>/dev/null; then
+            eval "_original_$cmd() { $cmd_path \"\$@\"; }"
+
+            # Create wrapper function
+            eval "$cmd() {
+                if _check_command_with_safeguard \"$cmd\" \"\$@\"; then
+                    _original_$cmd \"\$@\"
+                else
+                    return 1
+                fi
+            }"
+        fi
+    done
+
+    # Export the check function and wrappers
+    export -f _check_command_with_safeguard
+    for cmd in "${risky_commands[@]}"; do
+        [[ $(type -t "$cmd") == "function" ]] && export -f "$cmd"
+    done
 }
 
 _disable_safeguards() {
-    # Restore original rm if it exists
-    if type -t _original_rm &>/dev/null; then
-        unset -f rm
-    fi
+    # Restore original commands
+    local risky_commands=("rm" "dd" "mkfs" "shutdown" "reboot" "chmod" "chown" "curl" "wget")
+
+    for cmd in "${risky_commands[@]}"; do
+        if type -t "_original_$cmd" &>/dev/null; then
+            unset -f "$cmd"
+            unset -f "_original_$cmd"
+        fi
+    done
+
+    # Unset the check function
+    [[ $(type -t _check_command_with_safeguard) == "function" ]] && unset -f _check_command_with_safeguard
 }
 
 enable_command() {
@@ -1020,7 +1261,7 @@ enable_command() {
 
     echo_green "Interactive autocomplete enabled!"
     echo -e "\e[90mPress Ctrl+Space for interactive suggestions (add '--explain' for explanations)\e[0m"
-    echo -e "\e[90mSafeguards enabled: risky commands will require confirmation\e[0m"
+    echo -e "\e[90mAI-powered safeguards enabled: harmful commands will require confirmation\e[0m"
 }
 
 disable_command() {
@@ -1044,15 +1285,21 @@ command_command() {
 }
 
 clear_command() {
-    local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"} log_file=${ACSH_LOG_FILE:-"$HOME/.autocomplete/autocomplete.log"}
-    echo "This will clear the cache and log file."
-    echo -e "Cache directory: \e[31m$cache_dir\e[0m"
+    local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
+    local harm_cache_dir=${ACSH_HARM_CACHE_DIR:-"$HOME/.autocomplete/harm_cache"}
+    local log_file=${ACSH_LOG_FILE:-"$HOME/.autocomplete/autocomplete.log"}
+
+    echo "This will clear the cache, harm detection cache, and log file."
+    echo -e "Completion cache: \e[31m$cache_dir\e[0m"
+    echo -e "Harm cache: \e[31m$harm_cache_dir\e[0m"
     echo -e "Log file: \e[31m$log_file\e[0m"
     read -r -p "Are you sure? (y/n): " confirm
     if [[ $confirm != "y" ]]; then
         echo "Aborted."
         return
     fi
+
+    # Clear completion cache
     if [ -d "$cache_dir" ]; then
         local cache_files
         cache_files=$(list_cache)
@@ -1067,6 +1314,20 @@ clear_command() {
             echo "Cache is empty."
         fi
     fi
+
+    # Clear harm detection cache
+    if [ -d "$harm_cache_dir" ]; then
+        local harm_cache_count
+        harm_cache_count=$(find "$harm_cache_dir" -name "harm-*.json" 2>/dev/null | wc -l)
+        if [ "$harm_cache_count" -gt 0 ]; then
+            rm "$harm_cache_dir"/harm-*.json 2>/dev/null
+            echo "Cleared $harm_cache_count harm detection cache entries from: $harm_cache_dir"
+        else
+            echo "Harm detection cache is empty."
+        fi
+    fi
+
+    # Clear log file
     [ -f "$log_file" ] && { rm "$log_file"; echo "Removed: $log_file"; }
 }
 
@@ -1237,10 +1498,16 @@ _interactive_completion_menu() {
                 clear_menu
                 local selected_cmd="${options[selected]}"
 
-                # Check if command is risky (starts with rm)
-                if [[ "$selected_cmd" =~ ^[[:space:]]*rm[[:space:]] ]]; then
-                    echo -e "\e[1;33m⚠ WARNING: This command uses 'rm' which is irreversible.\e[0m"
+                # Detect harm using LLM
+                local harm_data is_harmful explanation
+                harm_data=$(detect_command_harm "$selected_cmd")
+                is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
+                explanation=$(echo "$harm_data" | jq -r '.explanation')
+
+                if [[ "$is_harmful" == "true" ]]; then
+                    echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
                     echo -e "\e[1;32m▶ Command:\e[0m $selected_cmd"
+                    echo -e "\e[1;90m▶ Reason:\e[0m $explanation"
                     echo
                     read -p "Are you sure you want to continue? (y/N): " -n 1 -r
                     echo
