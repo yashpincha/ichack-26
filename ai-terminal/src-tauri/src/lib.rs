@@ -8,6 +8,9 @@ mod safeguard;
 mod fep;
 mod usage;
 
+#[cfg(test)]
+mod tests;
+
 use std::sync::Mutex;
 use tauri::State;
 
