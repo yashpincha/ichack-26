@@ -861,11 +861,11 @@ _interactive_clam_widget() {
         touch "$cache_file"
     else
         echo
-        echo -e "\e[90mGenerating suggestions...\e[0m"
+        _start_spinner "Generating suggestions..."
         completions=$(openai_completion "$user_input" || true)
+        _stop_spinner
 
         if [[ -z "$completions" ]]; then
-            echo
             echo_error "Failed to generate completions"
             return
         fi
@@ -908,9 +908,10 @@ show_help() {
     echo "  - Harm assessments are cached for instant feedback on repeated commands"
     echo
     echo "Commands:"
+    echo "  demo                Show feature overview and usage examples"
     echo "  command             Run clam (simulate double Tab)"
     echo "  command --dry-run   Show prompt without executing"
-    echo "  fep [context]        Fix error please - analyze last failed command and suggest fix (uses configured API/model)"
+    echo "  fep [context]       Fix error please - analyze last failed command and suggest fix"
     echo "  model               Change language model"
     echo "  usage               Display usage stats"
     echo "  system              Display system information"
@@ -1238,7 +1239,8 @@ status"
         return
     fi
     if [[ -z "$current" ]]; then
-        readarray -t COMPREPLY <<< "install
+        readarray -t COMPREPLY <<< "demo
+install
 remove
 config
 enable
@@ -1362,7 +1364,6 @@ _disable_safeguards() {
 
 enable_command() {
     if check_if_enabled; then
-        echo_green "Reloading Clam.sh..."
         disable_command
     fi
     _clam_load_config
@@ -1390,9 +1391,15 @@ enable_command() {
     # Enable safeguard for risky commands
     _enable_safeguards
 
-    echo_green "Interactive clam enabled!"
-    echo -e "\e[90mPress Ctrl+Space for interactive suggestions (add '--explain' for explanations)\e[0m"
-    echo -e "\e[90mAI-powered safeguards enabled: harmful commands will require confirmation\e[0m"
+    # Show banner
+    _show_clam_banner
+    echo -e "  \e[1;32mCommand Line Assistance Module\e[0m - v$CLAM_VERSION"
+    echo
+    echo -e "  \e[32m✓\e[0m Interactive clam enabled!"
+    echo -e "  \e[90m• Press \e[0mCtrl+Space\e[90m for AI suggestions\e[0m"
+    echo -e "  \e[90m• Add \e[0m--explain\e[90m to see explanations\e[0m"
+    echo -e "  \e[90m• Safeguards active for dangerous commands\e[0m"
+    echo
 }
 
 disable_command() {
@@ -1564,6 +1571,46 @@ usage_command() {
 ###############################################################################
 #                      Enhanced Interactive Menu UX                           #
 ###############################################################################
+
+# Animated spinner that runs in background
+_spinner_pid=""
+
+_start_spinner() {
+    local message="${1:-Loading...}"
+    tput civis 2>/dev/null || true
+    (
+        local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+        local i=0
+        while true; do
+            printf "\r\e[90m${spin:$i:1} %s\e[0m" "$message"
+            i=$(( (i + 1) % 10 ))
+            sleep 0.1
+        done
+    ) &
+    _spinner_pid=$!
+}
+
+_stop_spinner() {
+    if [[ -n "$_spinner_pid" ]]; then
+        kill "$_spinner_pid" 2>/dev/null
+        wait "$_spinner_pid" 2>/dev/null
+        _spinner_pid=""
+    fi
+    printf "\r\e[K"
+    tput cnorm 2>/dev/null || true
+}
+
+# CLAM ASCII art banner
+_show_clam_banner() {
+    echo -e "\e[1;36m"
+    echo "   ██████╗██╗      █████╗ ███╗   ███╗"
+    echo "  ██╔════╝██║     ██╔══██╗████╗ ████║"
+    echo "  ██║     ██║     ███████║██╔████╔██║"
+    echo "  ██║     ██║     ██╔══██║██║╚██╔╝██║"
+    echo "  ╚██████╗███████╗██║  ██║██║ ╚═╝ ██║"
+    echo "   ╚═════╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝"
+    echo -e "\e[0m"
+}
 
 get_key() {
     IFS= read -rsn1 key 2>/dev/null >&2
@@ -1866,17 +1913,17 @@ model_command() {
     fi
     if [[ -z $CLAM_ACTIVE_API_KEY && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo "To set the API Key, run:"
-        echo -e "\t\e[31mautocomplete config set api_key <your-api-key>\e[0m"
+        echo -e "\t\e[31mclam config set api_key <your-api-key>\e[0m"
         echo -e "\t\e[31mexport ${CLAM_PROVIDER^^}_API_KEY=<your-api-key>\e[0m"
     fi
     if [[ ${CLAM_PROVIDER^^} == "OLLAMA" ]]; then
         echo "To set a custom endpoint:"
-        echo -e "\t\e[34mautocomplete config set endpoint <your-url>\e[0m"
+        echo -e "\t\e[34mclam config set endpoint <your-url>\e[0m"
         echo "Other models can be set with:"
-        echo -e "\t\e[34mautocomplete config set model <model-name>\e[0m"
+        echo -e "\t\e[34mclam config set model <model-name>\e[0m"
     fi
     echo "To change temperature:"
-    echo -e "\t\e[90mautocomplete config set temperature <temperature>\e[0m"
+    echo -e "\t\e[90mclam config set temperature <temperature>\e[0m"
     echo
 }
 
@@ -1889,10 +1936,10 @@ fep_command() {
     local user_context="${*:2}"
     local response recommended_cmd explanation content
 
-    echo -e "\e[33mAnalyzing error and generating fix...\e[0m"
     echo
-
+    _start_spinner "Analyzing error and generating fix..."
     response=$(fep_completion "$user_context")
+    _stop_spinner
 
     if [[ -z "$response" ]]; then
         echo_error "Failed to get response from API. Check config and API key (clam config)."
@@ -1949,6 +1996,44 @@ acsh_run() {
 }
 
 ###############################################################################
+#                           Demo Command                                      #
+###############################################################################
+
+demo_command() {
+    clear
+    _show_clam_banner
+    echo -e "  \e[1;32mCommand Line Assistance Module\e[0m - v$CLAM_VERSION"
+    echo
+    echo -e "  \e[90mLLM-powered bash completion & safety for everyone\e[0m"
+    echo
+    echo -e "\e[1;33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\e[0m"
+    echo
+    echo -e "  \e[1;36m🚀 FEATURE 1: AI-Powered Autocompletion\e[0m"
+    echo -e "     Type a command with a \e[1m# comment\e[0m describing what you want,"
+    echo -e "     then press \e[1;32mCtrl+Space\e[0m for intelligent suggestions."
+    echo
+    echo -e "     \e[90mExample:\e[0m \e[1mls # show hidden files sorted by size\e[0m"
+    echo -e "     \e[90mExample:\e[0m \e[1mfind # all .py files modified today\e[0m"
+    echo -e "     \e[90mExample:\e[0m \e[1mgit # undo my last commit\e[0m"
+    echo
+    echo -e "  \e[1;36m🛡️  FEATURE 2: Safety Safeguards\e[0m"
+    echo -e "     Dangerous commands are detected and require confirmation."
+    echo
+    echo -e "     \e[90mTry:\e[0m \e[1;31mrm -rf /\e[0m \e[90m(don't worry, we'll stop you!)\e[0m"
+    echo
+    echo -e "  \e[1;36m🔧 FEATURE 3: Fix Error Please (FEP)\e[0m"
+    echo -e "     Made a typo? Run \e[1mclam fep\e[0m to get AI-suggested fixes."
+    echo
+    echo -e "     \e[90mExample:\e[0m Run \e[1mgit stauts\e[0m then \e[1mclam fep\e[0m"
+    echo
+    echo -e "\e[1;33m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\e[0m"
+    echo
+    echo -e "  \e[90mSupports: OpenAI, Anthropic, Groq, and local Ollama models\e[0m"
+    echo -e "  \e[90mRun \e[0mclam model\e[90m to configure your preferred LLM\e[0m"
+    echo
+}
+
+###############################################################################
 #                              CLI ENTRY POINT                                #
 ###############################################################################
 
@@ -1991,6 +2076,9 @@ case "$1" in
         ;;
     fep)
         fep_command "$@"
+        ;;
+    demo)
+        demo_command
         ;;
     *)
         if [[ -n "$1" ]]; then
