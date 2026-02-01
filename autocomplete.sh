@@ -812,75 +812,10 @@ list_cache() {
 }
 
 _autocompletesh() {
+    # Standard bash completion only - no LLM
+    # Use Ctrl+Space for AI-powered suggestions
     _init_completion || return
     _default_completion
-    if [[ ${#COMPREPLY[@]} -eq 0 && $COMP_TYPE -eq 63 ]]; then
-        local completions user_input user_input_hash
-        acsh_load_config
-        if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
-            local provider_key="${ACSH_PROVIDER:-openai}_API_KEY"
-            provider_key=$(echo "$provider_key" | tr '[:lower:]' '[:upper:]')
-            echo_error "${provider_key} is not set. Please set it using: export ${provider_key}=<your-api-key> or disable autocomplete via: autocomplete disable"
-            echo
-            return
-        fi
-        if [[ -n "${COMP_WORDS[*]}" ]]; then
-            command="${COMP_WORDS[0]}"
-            if [[ -n "$COMP_CWORD" && "$COMP_CWORD" -lt "${#COMP_WORDS[@]}" ]]; then
-                current="${COMP_WORDS[COMP_CWORD]}"
-            fi
-        fi
-        user_input="${COMP_LINE:-"$command $current"}"
-        user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
-        export ACSH_INPUT="$user_input"
-        export ACSH_PROMPT=
-        export ACSH_RESPONSE=
-        local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
-        local cache_size=${ACSH_CACHE_SIZE:-100}
-        local cache_file="$cache_dir/acsh-$user_input_hash.txt"
-        if [[ -d "$cache_dir" && "$cache_size" -gt 0 && -f "$cache_file" ]]; then
-            completions=$(cat "$cache_file" || true)
-            touch "$cache_file"
-        else
-            echo -en "\e]12;green\a"
-            completions=$(openai_completion "$user_input" || true)
-            if [[ -z "$completions" ]]; then
-                echo -en "\e]12;red\a"
-                sleep 1
-                completions=$(openai_completion "$user_input" || true)
-            fi
-            echo -en "\e]12;white\a"
-            if [[ -d "$cache_dir" && "$cache_size" -gt 0 ]]; then
-                echo "$completions" > "$cache_file"
-                while [[ $(list_cache | wc -l) -gt "$cache_size" ]]; do
-                    oldest=$(list_cache | head -n 1 | cut -d ' ' -f 2-)
-                    rm "$oldest" || true
-                done
-            fi
-        fi
-        export ACSH_RESPONSE=$completions
-
-        # Store completions for interactive mode
-        export ACSH_LAST_COMPLETIONS="$completions"
-
-        if [[ -n "$completions" ]]; then
-            local num_rows
-            num_rows=$(echo "$completions" | wc -l)
-            COMPREPLY=()
-            # Extract just the command part (before |||) for display
-            local cmd_only
-            cmd_only=$(echo "$completions" | sed 's/|||.*//')
-            if [[ $num_rows -eq 1 ]]; then
-                readarray -t COMPREPLY <<<"$(echo -n "${cmd_only}" | sed "s/${command}[[:space:]]*//" | sed 's/:/\\:/g')"
-            else
-                cmd_only=$(echo "$cmd_only" | awk '{print NR". "$0}')
-                readarray -t COMPREPLY <<< "$cmd_only"
-            fi
-        fi
-        if [[ ${#COMPREPLY[@]} -eq 0 ]]; then
-            COMPREPLY=("$current")
-        fi
-    fi
 }
 
 # Interactive autocomplete function that can be bound to a key
