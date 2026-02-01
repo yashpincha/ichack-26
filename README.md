@@ -1,10 +1,10 @@
 # 🎯 CLAM: Command Line Assitance Module
 
-Not only beginners, but even experienced developers often forget command syntax and flags, and find themselves needing to refer to 
+Command line beginners often forget command syntax and flags, and even experienced developers often find themselves needing to refer to 
 external sources (e.g. LLMs and documentation). Especially when unfamiliar with the command line (or a new tool), it can be very easy 
 to make irreversible and destructive mistakes.
 
-CLAM uses LLMs (perhaps local!) to help you confidently use UNIX commands. Whether you are new to UNIX or deeply experienced, CLAM can help you save time and increase your productivity. In particular, you no longer have to navigate between external LLMs and your terminal!
+CLAM uses LLMs (local or cloud) to help you confidently use UNIX commands. Whether you are new to UNIX or deeply experienced, CLAM can help you save time and increase your productivity. In particular, you no longer have to navigate between external LLMs and your terminal!
 
 ## Quick Start
 
@@ -182,7 +182,7 @@ Developers:
 - Syed Sameer Faisal
 - Yash Pincha
 
-This project was influenced by [`clam.sh`](https://github.com/closedloop-technologies/clam-sh/tree/main).
+This project was influenced by [autocomplete-sh](https://github.com/closedloop-technologies/autocomplete-sh).
 
 ## License
 
