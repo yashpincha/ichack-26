@@ -1,5 +1,4 @@
 # 🎯 CLAM: Command Line Assitance Module
-========================================
 
 Not only beginners, but even experienced developers often forget command syntax and flags, and find themselves needing to refer to 
 external sources (e.g. LLMs and documentation). Especially when unfamiliar with the command line (or a new tool), it can be very easy 
