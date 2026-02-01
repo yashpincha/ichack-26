@@ -184,6 +184,12 @@ clam usage
 
 To test the tool, just execute `./run_tests.sh`. It will automatically install `bats` if you do not already have it.
 
+Alternatively, you may choose to use Docker to directly pull and run an existing image of the tool:
+```
+docker pull treefwog/autocomplete-sh:latest
+docker run -it treefwog/autocomplete-sh:latest
+```
+
 ## Developers
 
 Developers:
