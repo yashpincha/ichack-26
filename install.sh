@@ -17,7 +17,7 @@ detect_shell() {
 SHELL_TYPE=$(detect_shell)
 case "$SHELL_TYPE" in
     bash)
-        SCRIPT_NAME="autocomplete.sh"
+        SCRIPT_NAME="clam.sh"
         ;;
     *)
         echo "ERROR: Unsupported shell. Currently only bash is supported."
@@ -33,12 +33,17 @@ if [ ! -d "$(dirname "$INSTALL_LOCATION")" ]; then
     INSTALL_LOCATION="/usr/local/bin/$SCRIPT_NAME"
 fi
 
-# Copy local autocomplete.sh file
+# Copy local clam.sh file
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cp "$SCRIPT_DIR/autocomplete.sh" "$INSTALL_LOCATION"
+cp "$SCRIPT_DIR/clam.sh" "$INSTALL_LOCATION"
 
 # Install the LLMs
 chmod +x "$INSTALL_LOCATION"
+
+# Create symlink without .sh extension for easier command usage
+SYMLINK_LOCATION="$(dirname "$INSTALL_LOCATION")/clam"
+rm -f "$SYMLINK_LOCATION"
+ln -s "$INSTALL_LOCATION" "$SYMLINK_LOCATION"
 
 # Check if jq is installed
 if ! command -v jq > /dev/null 2>&1; then

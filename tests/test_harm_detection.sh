@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test script for harm detection
-source ./autocomplete.sh > /dev/null 2>&1
+source ./clam.sh > /dev/null 2>&1
 
 echo "================================"
 echo "Testing Harm Detection System"
@@ -76,7 +76,7 @@ done
 
 echo "================================"
 echo "Cache verification:"
-cache_dir="${ACSH_HARM_CACHE_DIR:-$HOME/.autocomplete/harm_cache}"
+cache_dir="${CLAM_HARM_CACHE_DIR:-$HOME/.clam/harm_cache}"
 if [ -d "$cache_dir" ]; then
     cache_count=$(ls -1 "$cache_dir" 2>/dev/null | wc -l)
     echo "Cache files created: $cache_count"

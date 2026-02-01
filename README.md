@@ -44,12 +44,12 @@ cd ichack-26
 We support OpenAI, Groq, Anthropic, and Ollama models, and even local models. Configure your model with:
 
 ```bash
-autocomplete model
+clam model
 ```
 
 ## How It Works
 
-`autocomplete.sh` provides faster, more accurate suggestions by considering:
+`clam.sh` provides faster, more accurate suggestions by considering:
 
 - Your machine's environment
 - Recently executed commands
@@ -59,7 +59,7 @@ autocomplete model
 View the full prompt with:
 
 ```bash
-autocomplete command --dry-run "your command here"
+clam command --dry-run "your command here"
 ```
 
 ## Tips and Tricks
@@ -76,7 +76,7 @@ $ ls # with file sizes in human-readable format
 Generating suggestions...
 
 ╔════════════════════════════════════════════════════════════════════╗
-║  Autocomplete Suggestions                                        ║
+║  Clam Suggestions                                        ║
 ╠════════════════════════════════════════════════════════════════════╣
 ║  Use ↑/↓ to navigate, Enter to execute, Esc to cancel          ║
 ╚════════════════════════════════════════════════════════════════════╝
@@ -114,7 +114,7 @@ Are you sure you want to continue? (y/N):
 ```
 
 ### 🔧 **Fix Error Please (FEP)**
-When a command fails, press `autocomplete fep` to get an AI-suggested fix.
+When a command fails, press `clam fep` to get an AI-suggested fix.
 
 ```
 $ gitt push origin main
@@ -128,7 +128,7 @@ Command 'gitt' not found, did you mean:
   command 'git' from deb git (1:2.43.0-1ubuntu7.3)
 See 'snap info <snapname>' for additional versions.
 
-$ autocomplete fep
+$ clam fep
 Analyzing error and generating fix...
 
 ━━━ Recommended Command ━━━
@@ -143,26 +143,26 @@ Run this command? [Y/n]
 ## Configuration
 
 ```bash
-source autocomplete config
+source clam config
 ```
 
 Update settings with:
 
 ```bash
-autocomplete config set <key> <value>
+clam config set <key> <value>
 ```
 
 Enable, disable, or check safeguarding status with:
 ```bash
-autocomplete safeguarding enable
-autocomplete safeguarding disable
-autocomplete safeguarding status
+clam safeguarding enable
+clam safeguarding disable
+clam safeguarding status
 ```
 
 ## Usage Tracking
 
 ```bash
-autocomplete usage
+clam usage
 ```
 
 ## Use Cases
@@ -190,7 +190,7 @@ Developers:
 - Syed Sameer Faisal
 - Yash Bincha
 
-This project was influenced by [`autocomplete.sh`](https://github.com/closedloop-technologies/autocomplete-sh/tree/main).
+This project was influenced by [`clam.sh`](https://github.com/closedloop-technologies/clam-sh/tree/main).
 
 ## License
 

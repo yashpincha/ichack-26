@@ -1,5 +1,5 @@
 #!/bin/bash
-# Autocomplete.sh - LLM Powered Bash Completion
+# Clam.sh - LLM Powered Bash Completion
 # MIT License - ClosedLoop Technologies, Inc.
 # Sean Kruzel 2024-2025
 #
@@ -14,13 +14,13 @@
 ###############################################################################
 
 error_exit() {
-    echo -e "\e[31mAutocomplete.sh - $1\e[0m" >&2
+    echo -e "\e[31mClam.sh - $1\e[0m" >&2
     # In a completion context, exit is too severe. Use return instead.
     return 1
 }
 
 echo_error() {
-    echo -e "\e[31mAutocomplete.sh - $1\e[0m" >&2
+    echo -e "\e[31mClam.sh - $1\e[0m" >&2
 }
 
 echo_green() {
@@ -31,51 +31,51 @@ echo_green() {
 #                      Global Variables & Model Definitions                   #
 ###############################################################################
 
-export ACSH_VERSION=0.5.0
+export CLAM_VERSION=0.5.0
 
-unset _autocomplete_modellist
-declare -A _autocomplete_modellist
+unset _clam_modellist
+declare -A _clam_modellist
 # OpenAI models
-_autocomplete_modellist['openai:	gpt-4o']='{ "completion_cost":0.0000100, "prompt_cost":0.00000250, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o", "provider": "openai" }'
-_autocomplete_modellist['openai:	gpt-4o-mini']='{ "completion_cost":0.0000060, "prompt_cost":0.00000015, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o-mini", "provider": "openai" }'
-_autocomplete_modellist['openai:	o1']='{ "completion_cost":0.0000600, "prompt_cost":0.00001500, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1", "provider": "openai" }'
-_autocomplete_modellist['openai:	o1-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1-mini", "provider": "openai" }'
-_autocomplete_modellist['openai:	o3-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o3-mini", "provider": "openai" }'
+_clam_modellist['openai:	gpt-4o']='{ "completion_cost":0.0000100, "prompt_cost":0.00000250, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o", "provider": "openai" }'
+_clam_modellist['openai:	gpt-4o-mini']='{ "completion_cost":0.0000060, "prompt_cost":0.00000015, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "gpt-4o-mini", "provider": "openai" }'
+_clam_modellist['openai:	o1']='{ "completion_cost":0.0000600, "prompt_cost":0.00001500, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1", "provider": "openai" }'
+_clam_modellist['openai:	o1-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o1-mini", "provider": "openai" }'
+_clam_modellist['openai:	o3-mini']='{ "completion_cost":0.0000440, "prompt_cost":0.00001100, "endpoint": "https://api.openai.com/v1/chat/completions", "model": "o3-mini", "provider": "openai" }'
 # Anthropic models
-_autocomplete_modellist['anthropic:	claude-3-7-sonnet-20250219']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-7-sonnet-20240219", "provider": "anthropic" }'
-_autocomplete_modellist['anthropic:	claude-3-5-sonnet-20241022']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-sonnet-20241022", "provider": "anthropic" }'
-_autocomplete_modellist['anthropic:	claude-3-5-haiku-20241022']='{ "completion_cost":0.0000040, "prompt_cost":0.0000008, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-haiku-20241022", "provider": "anthropic" }'
+_clam_modellist['anthropic:	claude-3-7-sonnet-20250219']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-7-sonnet-20240219", "provider": "anthropic" }'
+_clam_modellist['anthropic:	claude-3-5-sonnet-20241022']='{ "completion_cost":0.0000150, "prompt_cost":0.0000030, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-sonnet-20241022", "provider": "anthropic" }'
+_clam_modellist['anthropic:	claude-3-5-haiku-20241022']='{ "completion_cost":0.0000040, "prompt_cost":0.0000008, "endpoint": "https://api.anthropic.com/v1/messages", "model": "claude-3-5-haiku-20241022", "provider": "anthropic" }'
 # Groq models
-_autocomplete_modellist['groq:		llama3-8b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-8b-8192", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama3-70b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-70b-8192", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama-3.3-70b-versatile']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-versatile", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama-3.1-8b-instant']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.1-8b-instant", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama-guard-3-8b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-guard-3-8b", "provider": "groq" }'
-_autocomplete_modellist['groq:		mixtral-8x7b-32768']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mixtral-8x7b-32768", "provider": "groq" }'
-_autocomplete_modellist['groq:		gemma2-9b-it']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "gemma2-9b-it", "provider": "groq" }'
+_clam_modellist['groq:		llama3-8b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-8b-8192", "provider": "groq" }'
+_clam_modellist['groq:		llama3-70b-8192']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama3-70b-8192", "provider": "groq" }'
+_clam_modellist['groq:		llama-3.3-70b-versatile']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-versatile", "provider": "groq" }'
+_clam_modellist['groq:		llama-3.1-8b-instant']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.1-8b-instant", "provider": "groq" }'
+_clam_modellist['groq:		llama-guard-3-8b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-guard-3-8b", "provider": "groq" }'
+_clam_modellist['groq:		mixtral-8x7b-32768']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mixtral-8x7b-32768", "provider": "groq" }'
+_clam_modellist['groq:		gemma2-9b-it']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "gemma2-9b-it", "provider": "groq" }'
 # Groq preview models
-_autocomplete_modellist['groq:		mistral-saba-24b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mistral-saba-24b", "provider": "groq" }'
-_autocomplete_modellist['groq:		qwen-2.5-coder-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "qwen-2.5-coder-32b", "provider": "groq" }'
-_autocomplete_modellist['groq:		deepseek-r1-distill-qwen-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-qwen-32b", "provider": "groq" }'
-_autocomplete_modellist['groq:		deepseek-r1-distill-llama-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-llama-70b-specdec", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama-3.3-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-specdec", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama-3.2-1b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-1b-preview", "provider": "groq" }'
-_autocomplete_modellist['groq:		llama-3.2-3b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-3b-preview", "provider": "groq" }'
+_clam_modellist['groq:		mistral-saba-24b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "mistral-saba-24b", "provider": "groq" }'
+_clam_modellist['groq:		qwen-2.5-coder-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "qwen-2.5-coder-32b", "provider": "groq" }'
+_clam_modellist['groq:		deepseek-r1-distill-qwen-32b']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-qwen-32b", "provider": "groq" }'
+_clam_modellist['groq:		deepseek-r1-distill-llama-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "deepseek-r1-distill-llama-70b-specdec", "provider": "groq" }'
+_clam_modellist['groq:		llama-3.3-70b-specdec']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.3-70b-specdec", "provider": "groq" }'
+_clam_modellist['groq:		llama-3.2-1b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-1b-preview", "provider": "groq" }'
+_clam_modellist['groq:		llama-3.2-3b-preview']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "https://api.groq.com/openai/v1/chat/completions", "model": "llama-3.2-3b-preview", "provider": "groq" }'
 # Ollama models
-_autocomplete_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "codellama", "provider": "ollama" }'
-_autocomplete_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
+_clam_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "codellama", "provider": "ollama" }'
+_clam_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
 
 ###############################################################################
 #                    FEP (Fix Error Please) - Context Capture                  #
 ###############################################################################
-# Only set defaults if not already set (so "ACSH_LAST_COMMAND=cmd autocomplete fep" works)
-export ACSH_LAST_COMMAND="${ACSH_LAST_COMMAND:-}"
-export ACSH_LAST_EXIT_CODE="${ACSH_LAST_EXIT_CODE:-}"
-export ACSH_LAST_OUTPUT_FILE="${ACSH_LAST_OUTPUT_FILE:-$HOME/.autocomplete/last_output.txt}"
+# Only set defaults if not already set (so "CLAM_LAST_COMMAND=cmd clam fep" works)
+export CLAM_LAST_COMMAND="${CLAM_LAST_COMMAND:-}"
+export CLAM_LAST_EXIT_CODE="${CLAM_LAST_EXIT_CODE:-}"
+export CLAM_LAST_OUTPUT_FILE="${CLAM_LAST_OUTPUT_FILE:-$HOME/.clam/last_output.txt}"
 
-_acsh_capture_command_result() {
-    export ACSH_LAST_EXIT_CODE="$?"
-    export ACSH_LAST_COMMAND="$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')"
+_clam_capture_command_result() {
+    export CLAM_LAST_EXIT_CODE="$?"
+    export CLAM_LAST_COMMAND="$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')"
 }
 
 ###############################################################################
@@ -137,7 +137,7 @@ _get_output_instructions() {
 }
 
 _get_command_history() {
-    local HISTORY_LIMIT=${ACSH_MAX_HISTORY_COMMANDS:-20}
+    local HISTORY_LIMIT=${CLAM_MAX_HISTORY_COMMANDS:-20}
     history | tail -n "$HISTORY_LIMIT"
 }
 
@@ -152,7 +152,7 @@ _get_clean_command_history() {
 }
 
 _get_recent_files() {
-    local FILE_LIMIT=${ACSH_MAX_RECENT_FILES:-20}
+    local FILE_LIMIT=${CLAM_MAX_RECENT_FILES:-20}
     find . -maxdepth 1 -type f -exec ls -ld {} + | sort -r | head -n "$FILE_LIMIT"
 }
 
@@ -180,7 +180,7 @@ _build_prompt() {
     help_message=$(_get_help_message "$user_input")
     recent_files=$(_get_recent_files)
     output_instructions=$(_get_output_instructions)
-    other_environment_variables=$(env | grep '=' | grep -v 'ACSH_' | awk -F= '{print $1}' | grep -v 'PWD\|OSTYPE\|BASH\|USER\|HOME\|TERM\|OLDPWD\|HOSTNAME')
+    other_environment_variables=$(env | grep '=' | grep -v 'CLAM_' | awk -F= '{print $1}' | grep -v 'PWD\|OSTYPE\|BASH\|USER\|HOME\|TERM\|OLDPWD\|HOSTNAME')
     
     prompt="User command: \`$user_input\`
 
@@ -216,11 +216,11 @@ $output_instructions
 
 _build_fep_prompt() {
     local user_context="$1"
-    local last_cmd="${ACSH_LAST_COMMAND:-$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')}"
-    local last_exit="${ACSH_LAST_EXIT_CODE:-$?}"
+    local last_cmd="${CLAM_LAST_COMMAND:-$(fc -ln -1 2>/dev/null | sed 's/^[[:space:]]*//')}"
+    local last_exit="${CLAM_LAST_EXIT_CODE:-$?}"
     local last_output=""
 
-    [[ -f "$ACSH_LAST_OUTPUT_FILE" ]] && last_output="$(tail -100 "$ACSH_LAST_OUTPUT_FILE")"
+    [[ -f "$CLAM_LAST_OUTPUT_FILE" ]] && last_output="$(tail -100 "$CLAM_LAST_OUTPUT_FILE")"
 
     cat <<EOF
 # Error Recovery Request
@@ -285,8 +285,8 @@ build_common_payload() {
 _build_payload() {
     local user_input prompt system_message_prompt payload acsh_prompt
     local model temperature
-    model="${ACSH_MODEL:-gpt-4o}"
-    temperature="${ACSH_TEMPERATURE:-0.0}"
+    model="${CLAM_MODEL:-gpt-4o}"
+    temperature="${CLAM_TEMPERATURE:-0.0}"
 
     user_input="$1"
     prompt=$(_build_prompt "$@")
@@ -296,7 +296,7 @@ _build_payload() {
 $system_message_prompt
 # USER MESSAGE
 $prompt"
-    export ACSH_PROMPT="$acsh_prompt"
+    export CLAM_PROMPT="$acsh_prompt"
 
     prompt_content="$prompt"
     system_prompt="$system_message_prompt"
@@ -304,7 +304,7 @@ $prompt"
     local base_payload
     base_payload=$(build_common_payload)
 
-    case "${ACSH_PROVIDER^^}" in
+    case "${CLAM_PROVIDER^^}" in
         "ANTHROPIC")
             payload=$(echo "$base_payload" | jq '. + {
                 system: .messages[0].content,
@@ -408,7 +408,7 @@ log_request() {
     response_body="$2"
     user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
 
-    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         prompt_tokens=$(echo "$response_body" | jq -r '.usage.input_tokens')
         prompt_tokens_int=$((prompt_tokens))
         completion_tokens=$(echo "$response_body" | jq -r '.usage.output_tokens')
@@ -422,36 +422,36 @@ log_request() {
 
     created=$(date +%s)
     created=$(echo "$response_body" | jq -r ".created // $created")
-    api_cost=$(echo "$prompt_tokens_int * $ACSH_API_PROMPT_COST + $completion_tokens_int * $ACSH_API_COMPLETION_COST" | bc)
-    log_file=${ACSH_LOG_FILE:-"$HOME/.autocomplete/autocomplete.log"}
+    api_cost=$(echo "$prompt_tokens_int * $CLAM_API_PROMPT_COST + $completion_tokens_int * $CLAM_API_COMPLETION_COST" | bc)
+    log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
     echo "$created,$user_input_hash,$prompt_tokens_int,$completion_tokens_int,$api_cost" >> "$log_file"
 }
 
 openai_completion() {
     local content status_code response_body default_user_input user_input api_key payload endpoint timeout attempt max_attempts
-    endpoint=${ACSH_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
-    timeout=${ACSH_TIMEOUT:-30}
+    endpoint=${CLAM_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
+    timeout=${CLAM_TIMEOUT:-30}
     default_user_input="Write two to six most likely commands given the provided information"
     user_input=${*:-$default_user_input}
 
-    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
-        echo_error "ACSH_ACTIVE_API_KEY not set. Please set it with: export ${ACSH_PROVIDER^^}_API_KEY=<your-api-key>"
+    if [[ -z "$CLAM_ACTIVE_API_KEY" && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
+        echo_error "CLAM_ACTIVE_API_KEY not set. Please set it with: export ${CLAM_PROVIDER^^}_API_KEY=<your-api-key>"
         return
     fi
-    api_key="$ACSH_ACTIVE_API_KEY"
+    api_key="$CLAM_ACTIVE_API_KEY"
     payload=$(_build_payload "$user_input")
     
     max_attempts=2
     attempt=1
     while [ $attempt -le $max_attempts ]; do
         # Use 'command' to bypass wrapper functions and prevent infinite recursion
-        if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+        if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "content-type: application/json" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "x-api-key: $api_key" \
                 --data "$payload")
-        elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+        elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
         else
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
@@ -481,12 +481,12 @@ openai_completion() {
         return
     fi
 
-    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         content=$(echo "$response_body" | jq -r '.content[0].input.suggestions')
-    elif [[ "${ACSH_PROVIDER^^}" == "GROQ" ]]; then
+    elif [[ "${CLAM_PROVIDER^^}" == "GROQ" ]]; then
         content=$(echo "$response_body" | jq -r '.choices[0].message.content')
         content=$(echo "$content" | jq -r '.suggestions // .completions')
-    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+    elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
         content=$(echo "$response_body" | jq -r '.message.content')
         content=$(echo "$content" | jq -r '.suggestions // .completions')
     else
@@ -510,8 +510,8 @@ openai_completion() {
 _build_fep_payload() {
     local prompt="$1"
     local model temperature
-    model="${ACSH_MODEL:-gpt-4o}"
-    temperature="${ACSH_TEMPERATURE:-0.0}"
+    model="${CLAM_MODEL:-gpt-4o}"
+    temperature="${CLAM_TEMPERATURE:-0.0}"
     local system_prompt="You are an expert command-line debugger. Analyze errors and provide fixes. Respond only with valid JSON in this exact format: {\"recommended_command\": \"the fixed command\", \"explanation\": \"brief explanation\"}."
     local base_payload
     base_payload=$(jq -n --arg model "$model" \
@@ -526,7 +526,7 @@ _build_fep_payload() {
             ],
             temperature: ($temperature | tonumber)
         }')
-    case "${ACSH_PROVIDER^^}" in
+    case "${CLAM_PROVIDER^^}" in
         "ANTHROPIC")
             echo "$base_payload" | jq '. + {max_tokens: 1024}'
             ;;
@@ -547,12 +547,12 @@ fep_completion() {
     local prompt endpoint payload response status_code response_body api_key timeout attempt max_attempts
 
     prompt="$(_build_fep_prompt "$user_context")"
-    endpoint="${ACSH_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
-    timeout="${ACSH_TIMEOUT:-60}"
-    api_key="$ACSH_ACTIVE_API_KEY"
+    endpoint="${CLAM_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
+    timeout="${CLAM_TIMEOUT:-60}"
+    api_key="$CLAM_ACTIVE_API_KEY"
 
-    if [[ -z "$api_key" && "${ACSH_PROVIDER^^}" != "OLLAMA" ]]; then
-        echo_error "ACSH_ACTIVE_API_KEY not set. Run: autocomplete config (or set OPENAI_API_KEY)"
+    if [[ -z "$api_key" && "${CLAM_PROVIDER^^}" != "OLLAMA" ]]; then
+        echo_error "CLAM_ACTIVE_API_KEY not set. Run: clam config (or set OPENAI_API_KEY)"
         return 1
     fi
 
@@ -561,13 +561,13 @@ fep_completion() {
     attempt=1
 
     while [[ $attempt -le $max_attempts ]]; do
-        if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+        if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "content-type: application/json" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "x-api-key: $api_key" \
                 --data "$payload")
-        elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+        elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
         else
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
@@ -602,7 +602,7 @@ _build_harm_detection_payload() {
     local command="$1"
     local model temperature system_prompt prompt_content
 
-    model="${ACSH_MODEL:-gpt-4o}"
+    model="${CLAM_MODEL:-gpt-4o}"
     temperature="0.0"  # Use deterministic responses for safety checks
 
     system_prompt="You are a bash command security analyzer. Your role is to identify potentially harmful bash commands that could cause data loss, system damage, security risks, or unintended consequences. Analyze commands for: destructive file operations, system modifications, permission changes, network security risks, resource consumption attacks, and dangerous command chaining."
@@ -632,7 +632,7 @@ Classify this command and respond with ONLY a JSON object in this exact format:
                           }')
 
     local payload
-    case "${ACSH_PROVIDER^^}" in
+    case "${CLAM_PROVIDER^^}" in
         "ANTHROPIC")
             payload=$(echo "$base_payload" | jq '. + {
                 system: .messages[0].content,
@@ -693,11 +693,11 @@ detect_command_harm() {
     local command_hash cache_file cache_dir harm_response
 
     # Load configuration to ensure API keys are set
-    acsh_load_config
+    _clam_load_config
 
     # Generate cache hash
     command_hash=$(echo -n "$command" | md5sum | cut -d ' ' -f 1)
-    cache_dir="${ACSH_HARM_CACHE_DIR:-$HOME/.autocomplete/harm_cache}"
+    cache_dir="${CLAM_HARM_CACHE_DIR:-$HOME/.clam/harm_cache}"
     cache_file="$cache_dir/harm-$command_hash.json"
 
     # Check cache first (instant return)
@@ -709,21 +709,21 @@ detect_command_harm() {
     # Build and send API request
     local payload endpoint timeout api_key response status_code response_body
 
-    endpoint=${ACSH_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
-    timeout=${ACSH_HARM_TIMEOUT:-3}
-    api_key="$ACSH_ACTIVE_API_KEY"
+    endpoint=${CLAM_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
+    timeout=${CLAM_HARM_TIMEOUT:-3}
+    api_key="$CLAM_ACTIVE_API_KEY"
 
     payload=$(_build_harm_detection_payload "$command")
 
     # Call API with short timeout for harm detection
     # Use 'command' to bypass wrapper functions and prevent infinite recursion
-    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
             -H "content-type: application/json" \
             -H "anthropic-version: 2023-06-01" \
             -H "x-api-key: $api_key" \
             --data "$payload")
-    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+    elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
         response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
     else
         response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
@@ -744,11 +744,11 @@ detect_command_harm() {
 
     # Parse response based on provider
     local harm_data
-    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         harm_data=$(echo "$response_body" | jq -r '.content[0].input')
-    elif [[ "${ACSH_PROVIDER^^}" == "GROQ" ]]; then
+    elif [[ "${CLAM_PROVIDER^^}" == "GROQ" ]]; then
         harm_data=$(echo "$response_body" | jq -r '.choices[0].message.content')
-    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+    elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
         harm_data=$(echo "$response_body" | jq -r '.message.content')
     else
         # OpenAI function calling - arguments is a JSON string that needs parsing
@@ -807,19 +807,19 @@ _default_completion() {
 }
 
 list_cache() {
-    local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
+    local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
     find "$cache_dir" -maxdepth 1 -type f -name "acsh-*" -printf '%T+ %p\n' | sort
 }
 
-_autocompletesh() {
+_clamsh() {
     # Standard bash completion only - no LLM
     # Use Ctrl+Space for AI-powered suggestions
     _init_completion || return
     _default_completion
 }
 
-# Interactive autocomplete function that can be bound to a key
-_interactive_autocomplete_widget() {
+# Interactive clam function that can be bound to a key
+_interactive_clam_widget() {
     local user_input completions show_explanations
 
     # Get current line content
@@ -840,20 +840,20 @@ _interactive_autocomplete_widget() {
     fi
 
     # Load config
-    acsh_load_config
+    _clam_load_config
 
     # Check API key
-    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
+    if [[ -z "$CLAM_ACTIVE_API_KEY" && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo
-        echo_error "API key not set. Configure with: autocomplete config"
+        echo_error "API key not set. Configure with: clam config"
         return
     fi
 
     # Get completions from cache or API
     local user_input_hash cache_dir cache_size cache_file
     user_input_hash=$(echo -n "$user_input" | md5sum | cut -d ' ' -f 1)
-    cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
-    cache_size=${ACSH_CACHE_SIZE:-100}
+    cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
+    cache_size=${CLAM_CACHE_SIZE:-100}
     cache_file="$cache_dir/acsh-$user_input_hash.txt"
 
     if [[ -d "$cache_dir" && "$cache_size" -gt 0 && -f "$cache_file" ]]; then
@@ -894,11 +894,11 @@ _interactive_autocomplete_widget() {
 ###############################################################################
 
 show_help() {
-    echo_green "Autocomplete.sh - LLM Powered Bash Completion"
-    echo "Usage: autocomplete [options] command"
-    echo "       autocomplete [options] install|remove|config|model|enable|disable|safeguard|clear|usage|system|command|fep|--help"
+    echo_green "Clam.sh - LLM Powered Bash Completion"
+    echo "Usage: clam [options] command"
+    echo "       clam [options] install|remove|config|model|enable|disable|safeguard|clear|usage|system|command|fep|--help"
     echo
-    echo "Autocomplete.sh enhances bash completion with LLM capabilities."
+    echo "Clam.sh enhances bash completion with LLM capabilities."
     echo
     echo -e "\e[1;32mUsage:\e[0m"
     echo "  - Press Tab twice for suggestions (standard completion)"
@@ -908,7 +908,7 @@ show_help() {
     echo "  - Harm assessments are cached for instant feedback on repeated commands"
     echo
     echo "Commands:"
-    echo "  command             Run autocomplete (simulate double Tab)"
+    echo "  command             Run clam (simulate double Tab)"
     echo "  command --dry-run   Show prompt without executing"
     echo "  fep [context]        Fix error please - analyze last failed command and suggest fix (uses configured API/model)"
     echo "  model               Change language model"
@@ -917,10 +917,10 @@ show_help() {
     echo "  config              Show or set configuration values"
     echo "    config set <key> <value>  Set a config value"
     echo "    config reset             Reset config to defaults"
-    echo "  install             Install autocomplete to .bashrc"
+    echo "  install             Install clam to .bashrc"
     echo "  remove              Remove installation from .bashrc"
-    echo "  enable              Enable autocomplete"
-    echo "  disable             Disable autocomplete"
+    echo "  enable              Enable clam"
+    echo "  disable             Disable clam"
     echo "  safeguard <action>  Manage harmful command detection"
     echo "    enable            Enable safeguards"
     echo "    disable           Disable safeguards"
@@ -928,7 +928,7 @@ show_help() {
     echo "  clear               Clear cache and log files"
     echo "  --help              Show this help message"
     echo
-    echo "Submit issues at: https://github.com/closedloop-technologies/autocomplete-sh/issues"
+    echo "Submit issues at: https://github.com/closedloop-technologies/clam-sh/issues"
 }
 
 is_subshell() {
@@ -946,25 +946,25 @@ is_being_sourced() {
 }
 
 show_config() {
-    local config_file="$HOME/.autocomplete/config" term_width small_table
-    echo_green "Autocomplete.sh - Configuration and Settings - Version $ACSH_VERSION"
+    local config_file="$HOME/.clam/config" term_width small_table
+    echo_green "Clam.sh - Configuration and Settings - Version $CLAM_VERSION"
     if ! is_being_sourced; then
         echo "  STATUS: Unknown - completion state cannot be checked from a subprocess."
-        echo "  Run 'source autocomplete config' to check status in your current shell."
+        echo "  Run 'source clam config' to check status in your current shell."
         return
     elif is_subshell; then
-        echo "  STATUS: Unknown. Run 'source autocomplete config' to check status."
+        echo "  STATUS: Unknown. Run 'source clam config' to check status."
         return
     elif check_if_enabled; then
         echo -e "  STATUS: \033[32;5mEnabled\033[0m"
     else
-        echo -e "  STATUS: \033[31;5mDisabled\033[0m - Run 'source autocomplete config' to verify."
+        echo -e "  STATUS: \033[31;5mDisabled\033[0m - Run 'source clam config' to verify."
     fi
     if [ ! -f "$config_file" ]; then
-        echo_error "Configuration file not found: $config_file. Run autocomplete install."
+        echo_error "Configuration file not found: $config_file. Run clam install."
         return
     fi
-    acsh_load_config
+    _clam_load_config
     term_width=$(tput cols)
     if [[ $term_width -gt 70 ]]; then
         term_width=70; small_table=0
@@ -972,8 +972,8 @@ show_config() {
     if [[ $term_width -lt 40 ]]; then
         term_width=70; small_table=1
     fi
-    for config_var in $(compgen -v | grep ACSH_); do
-        if [[ $config_var == "ACSH_INPUT" || $config_var == "ACSH_PROMPT" || $config_var == "ACSH_RESPONSE" ]]; then
+    for config_var in $(compgen -v | grep CLAM_); do
+        if [[ $config_var == "CLAM_INPUT" || $config_var == "CLAM_PROMPT" || $config_var == "CLAM_RESPONSE" ]]; then
             continue
         fi
         config_value="${!config_var}"
@@ -989,8 +989,8 @@ show_config() {
         fi
     done
     echo -e "  ===================================================================="
-    for config_var in $(compgen -v | grep ACSH_); do
-        if [[ $config_var == "ACSH_INPUT" || $config_var == "ACSH_PROMPT" || $config_var == "ACSH_RESPONSE" ]]; then
+    for config_var in $(compgen -v | grep CLAM_); do
+        if [[ $config_var == "CLAM_INPUT" || $config_var == "CLAM_PROMPT" || $config_var == "CLAM_RESPONSE" ]]; then
             continue
         fi
         if [[ ${config_var: -8} != "_API_KEY" ]]; then
@@ -1015,22 +1015,22 @@ show_config() {
 }
 
 set_config() {
-    local key="$1" value="$2" config_file="$HOME/.autocomplete/config"
+    local key="$1" value="$2" config_file="$HOME/.clam/config"
     key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     if [ -z "$key" ]; then
-        echo_error "SyntaxError: expected 'autocomplete config set <key> <value>'"
+        echo_error "SyntaxError: expected 'clam config set <key> <value>'"
         return
     fi
     if [ ! -f "$config_file" ]; then
-        echo_error "Configuration file not found: $config_file. Run autocomplete install."
+        echo_error "Configuration file not found: $config_file. Run clam install."
         return
     fi
     sed -i "s|^\($key:\).*|\1 $value|" "$config_file"
-    acsh_load_config
+    _clam_load_config
 }
 
 config_command() {
-    local command config_file="$HOME/.autocomplete/config"
+    local command config_file="$HOME/.clam/config"
     command="${*:2}"
     if [ -z "$command" ]; then
         show_config
@@ -1040,7 +1040,7 @@ config_command() {
         local key="$3" value="$4"
         echo "Setting configuration key '$key' to '$value'"
         set_config "$key" "$value"
-        echo_green "Configuration updated. Run 'autocomplete config' to view changes."
+        echo_green "Configuration updated. Run 'clam config' to view changes."
         return
     fi
     if [[ "$command" == "reset" ]]; then
@@ -1049,14 +1049,14 @@ config_command() {
         build_config
         return
     fi
-    echo_error "SyntaxError: expected 'autocomplete config set <key> <value>' or 'autocomplete config reset'"
+    echo_error "SyntaxError: expected 'clam config set <key> <value>' or 'clam config reset'"
 }
 
 build_config() {
-    local config_file="$HOME/.autocomplete/config" default_config
+    local config_file="$HOME/.clam/config" default_config
     if [ ! -f "$config_file" ]; then
-        echo "Creating default configuration file at ~/.autocomplete/config"
-        default_config="# ~/.autocomplete/config
+        echo "Creating default configuration file at ~/.clam/config"
+        default_config="# ~/.clam/config
 
 # OpenAI API Key
 openai_api_key: $OPENAI_API_KEY
@@ -1083,23 +1083,23 @@ max_history_commands: 20
 max_recent_files: 20
 
 # Cache settings
-cache_dir: $HOME/.autocomplete/cache
+cache_dir: $HOME/.clam/cache
 cache_size: 10
 
 # Logging settings
-log_file: $HOME/.autocomplete/autocomplete.log
+log_file: $HOME/.clam/clam.log
 
 # Harm detection settings
 harm_detection_enabled: true
-harm_cache_dir: $HOME/.autocomplete/harm_cache
+harm_cache_dir: $HOME/.clam/harm_cache
 harm_cache_size: 100
 harm_timeout: 3"
         echo "$default_config" > "$config_file"
     fi
 }
 
-acsh_load_config() {
-    local config_file="$HOME/.autocomplete/config" key value
+_clam_load_config() {
+    local config_file="$HOME/.clam/config" key value
     if [ -f "$config_file" ]; then
         while IFS=':' read -r key value; do
             if [[ $key =~ ^# ]] || [[ -z $key ]]; then
@@ -1109,31 +1109,31 @@ acsh_load_config() {
             value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             key=$(echo "$key" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
             if [[ -n $value ]]; then
-                export "ACSH_$key"="$value"
+                export "CLAM_$key"="$value"
             fi
         done < "$config_file"
-        if [[ -z "$ACSH_OPENAI_API_KEY" && -n "$OPENAI_API_KEY" ]]; then
-            export ACSH_OPENAI_API_KEY="$OPENAI_API_KEY"
+        if [[ -z "$CLAM_OPENAI_API_KEY" && -n "$OPENAI_API_KEY" ]]; then
+            export CLAM_OPENAI_API_KEY="$OPENAI_API_KEY"
         fi
-        if [[ -z "$ACSH_ANTHROPIC_API_KEY" && -n "$ANTHROPIC_API_KEY" ]]; then
-            export ACSH_ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+        if [[ -z "$CLAM_ANTHROPIC_API_KEY" && -n "$ANTHROPIC_API_KEY" ]]; then
+            export CLAM_ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
         fi
-        if [[ -z "$ACSH_GROQ_API_KEY" && -n "$GROQ_API_KEY" ]]; then
-            export ACSH_GROQ_API_KEY="$GROQ_API_KEY"
+        if [[ -z "$CLAM_GROQ_API_KEY" && -n "$GROQ_API_KEY" ]]; then
+            export CLAM_GROQ_API_KEY="$GROQ_API_KEY"
         fi
-        if [[ -z "$ACSH_OLLAMA_API_KEY" && -n "$LLM_API_KEY" ]]; then
-            export ACSH_OLLAMA_API_KEY="$LLM_API_KEY"
+        if [[ -z "$CLAM_OLLAMA_API_KEY" && -n "$LLM_API_KEY" ]]; then
+            export CLAM_OLLAMA_API_KEY="$LLM_API_KEY"
         fi
         # If the custom API key was set, map it to OLLAMA if needed.
-        if [[ -z "$ACSH_OLLAMA_API_KEY" && -n "$ACSH_CUSTOM_API_KEY" ]]; then
-            export ACSH_OLLAMA_API_KEY="$ACSH_CUSTOM_API_KEY"
+        if [[ -z "$CLAM_OLLAMA_API_KEY" && -n "$CLAM_CUSTOM_API_KEY" ]]; then
+            export CLAM_OLLAMA_API_KEY="$CLAM_CUSTOM_API_KEY"
         fi
-        case "${ACSH_PROVIDER:-openai}" in
-            "openai") export ACSH_ACTIVE_API_KEY="$ACSH_OPENAI_API_KEY" ;;
-            "anthropic") export ACSH_ACTIVE_API_KEY="$ACSH_ANTHROPIC_API_KEY" ;;
-            "groq") export ACSH_ACTIVE_API_KEY="$ACSH_GROQ_API_KEY" ;;
-            "ollama") export ACSH_ACTIVE_API_KEY="$ACSH_OLLAMA_API_KEY" ;;
-            *) echo_error "Unknown provider: $ACSH_PROVIDER" ;;
+        case "${CLAM_PROVIDER:-openai}" in
+            "openai") export CLAM_ACTIVE_API_KEY="$CLAM_OPENAI_API_KEY" ;;
+            "anthropic") export CLAM_ACTIVE_API_KEY="$CLAM_ANTHROPIC_API_KEY" ;;
+            "groq") export CLAM_ACTIVE_API_KEY="$CLAM_GROQ_API_KEY" ;;
+            "ollama") export CLAM_ACTIVE_API_KEY="$CLAM_OLLAMA_API_KEY" ;;
+            *) echo_error "Unknown provider: $CLAM_PROVIDER" ;;
         esac
     else
         echo "Configuration file not found: $config_file"
@@ -1141,72 +1141,72 @@ acsh_load_config() {
 }
 
 install_command() {
-    local bashrc_file="$HOME/.bashrc" autocomplete_setup="source autocomplete enable" autocomplete_cli_setup="complete -F _autocompletesh_cli autocomplete"
-    if ! command -v autocomplete &>/dev/null; then
-        echo_error "autocomplete.sh not in PATH. Follow install instructions at https://github.com/closedloop-technologies/autocomplete-sh"
+    local bashrc_file="$HOME/.bashrc" clam_setup="source clam enable" clam_cli_setup="complete -F _clamsh_cli clam"
+    if ! command -v clam &>/dev/null; then
+        echo_error "clam.sh not in PATH. Follow install instructions at https://github.com/closedloop-technologies/clam-sh"
         return
     fi
-    if [[ ! -d "$HOME/.autocomplete" ]]; then
-        echo "Creating ~/.autocomplete directory"
-        mkdir -p "$HOME/.autocomplete"
+    if [[ ! -d "$HOME/.clam" ]]; then
+        echo "Creating ~/.clam directory"
+        mkdir -p "$HOME/.clam"
     fi
-    local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
+    local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
     if [[ ! -d "$cache_dir" ]]; then
         mkdir -p "$cache_dir"
     fi
     build_config
-    acsh_load_config
-    if ! grep -qF "$autocomplete_setup" "$bashrc_file"; then
-        echo -e "# Autocomplete.sh" >> "$bashrc_file"
-        echo -e "$autocomplete_setup\n" >> "$bashrc_file"
-        echo "Added autocomplete.sh setup to $bashrc_file"
+    _clam_load_config
+    if ! grep -qF "$clam_setup" "$bashrc_file"; then
+        echo -e "# Clam.sh" >> "$bashrc_file"
+        echo -e "$clam_setup\n" >> "$bashrc_file"
+        echo "Added clam.sh setup to $bashrc_file"
     else
-        echo "Autocomplete.sh setup already exists in $bashrc_file"
+        echo "Clam.sh setup already exists in $bashrc_file"
     fi
-    if ! grep -qF "$autocomplete_cli_setup" "$bashrc_file"; then
-        echo -e "# Autocomplete.sh CLI" >> "$bashrc_file"
-        echo -e "$autocomplete_cli_setup\n" >> "$bashrc_file"
-        echo "Added autocomplete CLI completion to $bashrc_file"
+    if ! grep -qF "$clam_cli_setup" "$bashrc_file"; then
+        echo -e "# Clam.sh CLI" >> "$bashrc_file"
+        echo -e "$clam_cli_setup\n" >> "$bashrc_file"
+        echo "Added clam CLI completion to $bashrc_file"
     fi
     echo
-    echo_green "Autocomplete.sh - Version $ACSH_VERSION installation complete."
-    echo -e "Run: source $bashrc_file to enable autocomplete."
-    echo -e "Then run: autocomplete model to select a language model."
+    echo_green "Clam.sh - Version $CLAM_VERSION installation complete."
+    echo -e "Run: source $bashrc_file to enable clam."
+    echo -e "Then run: clam model to select a language model."
 }
 
 remove_command() {
-    local config_file="$HOME/.autocomplete/config" cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"} log_file=${ACSH_LOG_FILE:-"$HOME/.autocomplete/autocomplete.log"} bashrc_file="$HOME/.bashrc"
-    echo_green "Removing Autocomplete.sh installation..."
+    local config_file="$HOME/.clam/config" cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"} log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"} bashrc_file="$HOME/.bashrc"
+    echo_green "Removing Clam.sh installation..."
     [ -f "$config_file" ] && { rm "$config_file"; echo "Removed: $config_file"; }
     [ -d "$cache_dir" ] && { rm -rf "$cache_dir"; echo "Removed: $cache_dir"; }
     [ -f "$log_file" ] && { rm "$log_file"; echo "Removed: $log_file"; }
-    if [ -d "$HOME/.autocomplete" ]; then
-        if [ -z "$(ls -A "$HOME/.autocomplete")" ]; then
-            rmdir "$HOME/.autocomplete"
-            echo "Removed: $HOME/.autocomplete"
+    if [ -d "$HOME/.clam" ]; then
+        if [ -z "$(ls -A "$HOME/.clam")" ]; then
+            rmdir "$HOME/.clam"
+            echo "Removed: $HOME/.clam"
         else
-            echo "Skipped removing $HOME/.autocomplete (not empty)"
+            echo "Skipped removing $HOME/.clam (not empty)"
         fi
     fi
     if [ -f "$bashrc_file" ]; then
-        if grep -qF "source autocomplete enable" "$bashrc_file"; then
-            sed -i '/# Autocomplete.sh/d' "$bashrc_file"
-            sed -i '/autocomplete/d' "$bashrc_file"
-            echo "Removed autocomplete.sh setup from $bashrc_file"
+        if grep -qF "source clam enable" "$bashrc_file"; then
+            sed -i '/# Clam.sh/d' "$bashrc_file"
+            sed -i '/clam/d' "$bashrc_file"
+            echo "Removed clam.sh setup from $bashrc_file"
         fi
     fi
-    local autocomplete_script
-    autocomplete_script=$(command -v autocomplete)
-    if [ -n "$autocomplete_script" ]; then
-        echo "Autocomplete script is at: $autocomplete_script"
+    local clam_script
+    clam_script=$(command -v clam)
+    if [ -n "$clam_script" ]; then
+        echo "Clam script is at: $clam_script"
         if [ "$1" == "-y" ]; then
-            rm "$autocomplete_script"
-            echo "Removed: $autocomplete_script"
+            rm "$clam_script"
+            echo "Removed: $clam_script"
         else
-            read -r -p "Remove the autocomplete script? (y/n): " confirm
+            read -r -p "Remove the clam script? (y/n): " confirm
             if [[ $confirm == "y" ]]; then
-                rm "$autocomplete_script"
-                echo "Removed: $autocomplete_script"
+                rm "$clam_script"
+                echo "Removed: $clam_script"
             fi
         fi
     fi
@@ -1215,11 +1215,11 @@ remove_command() {
 
 check_if_enabled() {
     local is_enabled
-    is_enabled=$(complete -p | grep _autocompletesh | grep -cv _autocompletesh_cli)
+    is_enabled=$(complete -p | grep _clamsh | grep -cv _clamsh_cli)
     (( is_enabled > 0 )) && return 0 || return 1
 }
 
-_autocompletesh_cli() {
+_clamsh_cli() {
     if [[ -n "${COMP_WORDS[*]}" ]]; then
         command="${COMP_WORDS[0]}"
         if [[ -n "$COMP_CWORD" && "$COMP_CWORD" -lt "${#COMP_WORDS[@]}" ]]; then
@@ -1262,7 +1262,7 @@ _check_command_with_safeguard() {
     local full_cmd="$cmd_name $*"
 
     # Check if safeguards are enabled - read directly from config file
-    local config_file="$HOME/.autocomplete/config"
+    local config_file="$HOME/.clam/config"
     local safeguards_enabled="true"  # default
     if [ -f "$config_file" ]; then
         safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
@@ -1273,16 +1273,16 @@ _check_command_with_safeguard() {
     fi
 
     # Prevent infinite recursion - skip check if already inside safeguard
-    if [[ -n "${_ACSH_IN_SAFEGUARD:-}" ]]; then
+    if [[ -n "${_CLAM_IN_SAFEGUARD:-}" ]]; then
         return 0
     fi
 
     # Set flag to prevent re-entry
-    export _ACSH_IN_SAFEGUARD=1
+    export _CLAM_IN_SAFEGUARD=1
 
     # Check if detect_command_harm function is available
     if ! type -t detect_command_harm &>/dev/null; then
-        unset _ACSH_IN_SAFEGUARD
+        unset _CLAM_IN_SAFEGUARD
         return 0
     fi
 
@@ -1293,7 +1293,7 @@ _check_command_with_safeguard() {
     explanation=$(echo "$harm_data" | jq -r '.explanation')
 
     # Clear flag before prompting user (so user commands work normally)
-    unset _ACSH_IN_SAFEGUARD
+    unset _CLAM_IN_SAFEGUARD
 
     if [[ "$is_harmful" == "true" ]]; then
         echo -e "\e[1;33m⚠ WARNING: Potentially harmful command detected!\e[0m"
@@ -1336,7 +1336,7 @@ _enable_safeguards() {
     # Export the check function, harm detection function, dependencies, and wrappers
     export -f _check_command_with_safeguard
     export -f detect_command_harm
-    export -f acsh_load_config
+    export -f _clam_load_config
     export -f _build_harm_detection_payload
     export -f echo_error
     for cmd in "${risky_commands[@]}"; do
@@ -1357,42 +1357,42 @@ _disable_safeguards() {
     done
 
     # Unset the check and harm detection functions
-    # Note: We don't unset acsh_load_config, echo_error, or _build_harm_detection_payload
+    # Note: We don't unset _clam_load_config, echo_error, or _build_harm_detection_payload
     # as they're used elsewhere in the script
     [[ $(type -t _check_command_with_safeguard) == "function" ]] && unset -f _check_command_with_safeguard
 }
 
 enable_command() {
     if check_if_enabled; then
-        echo_green "Reloading Autocomplete.sh..."
+        echo_green "Reloading Clam.sh..."
         disable_command
     fi
-    acsh_load_config
-    complete -D -E -F _autocompletesh -o nospace
+    _clam_load_config
+    complete -D -E -F _clamsh -o nospace
 
-    # Bind Ctrl+Space to interactive autocomplete widget
-    bind -x '"\C-@": _interactive_autocomplete_widget'
+    # Bind Ctrl+Space to interactive clam widget
+    bind -x '"\C-@": _interactive_clam_widget'
 
     # FEP: capture last command and exit code after each command via PROMPT_COMMAND
-    if [[ "$PROMPT_COMMAND" != *"_acsh_capture_command_result"* ]]; then
+    if [[ "$PROMPT_COMMAND" != *"_clam_capture_command_result"* ]]; then
         if [[ -n "$PROMPT_COMMAND" ]]; then
-            PROMPT_COMMAND="_acsh_capture_command_result; $PROMPT_COMMAND"
+            PROMPT_COMMAND="_clam_capture_command_result; $PROMPT_COMMAND"
         else
-            PROMPT_COMMAND="_acsh_capture_command_result"
+            PROMPT_COMMAND="_clam_capture_command_result"
         fi
         export PROMPT_COMMAND
     fi
 
-    # FEP shortcut: allow user to just type "fep" instead of "autocomplete fep"
+    # FEP shortcut: allow user to just type "fep" instead of "clam fep"
     fep() {
-        autocomplete fep "$@"
+        clam fep "$@"
     }
     export -f fep
 
     # Enable safeguard for risky commands
     _enable_safeguards
 
-    echo_green "Interactive autocomplete enabled!"
+    echo_green "Interactive clam enabled!"
     echo -e "\e[90mPress Ctrl+Space for interactive suggestions (add '--explain' for explanations)\e[0m"
     echo -e "\e[90mAI-powered safeguards enabled: harmful commands will require confirmation\e[0m"
 }
@@ -1403,7 +1403,7 @@ disable_command() {
     fi
     # Remove FEP capture from PROMPT_COMMAND
     if [[ -n "$PROMPT_COMMAND" ]]; then
-        PROMPT_COMMAND="${PROMPT_COMMAND//_acsh_capture_command_result/}"
+        PROMPT_COMMAND="${PROMPT_COMMAND//_clam_capture_command_result/}"
         PROMPT_COMMAND="${PROMPT_COMMAND//;;/;}"
         PROMPT_COMMAND="${PROMPT_COMMAND#;}"
         PROMPT_COMMAND="${PROMPT_COMMAND%;}"
@@ -1428,9 +1428,9 @@ command_command() {
 }
 
 clear_command() {
-    local cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
-    local harm_cache_dir=${ACSH_HARM_CACHE_DIR:-"$HOME/.autocomplete/harm_cache"}
-    local log_file=${ACSH_LOG_FILE:-"$HOME/.autocomplete/autocomplete.log"}
+    local cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
+    local harm_cache_dir=${CLAM_HARM_CACHE_DIR:-"$HOME/.clam/harm_cache"}
+    local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"}
 
     echo "This will clear the cache, harm detection cache, and log file."
     echo -e "Completion cache: \e[31m$cache_dir\e[0m"
@@ -1476,7 +1476,7 @@ clear_command() {
 
 safeguard_command() {
     local action="$1"
-    local config_file="$HOME/.autocomplete/config"
+    local config_file="$HOME/.clam/config"
 
     case "$action" in
         enable)
@@ -1530,7 +1530,7 @@ safeguard_command() {
             fi
             ;;
         *)
-            echo "Usage: autocomplete safeguard <enable|disable|status>"
+            echo "Usage: clam safeguard <enable|disable|status>"
             echo "  enable  - Enable harmful command detection"
             echo "  disable - Disable harmful command detection"
             echo "  status  - Show current safeguard status"
@@ -1539,10 +1539,10 @@ safeguard_command() {
 }
 
 usage_command() {
-    local log_file=${ACSH_LOG_FILE:-"$HOME/.autocomplete/autocomplete.log"} cache_dir=${ACSH_CACHE_DIR:-"$HOME/.autocomplete/cache"}
+    local log_file=${CLAM_LOG_FILE:-"$HOME/.clam/clam.log"} cache_dir=${CLAM_CACHE_DIR:-"$HOME/.clam/cache"}
     local cache_size number_of_lines api_cost avg_api_cost
     cache_size=$(list_cache | wc -l)
-    echo_green "Autocomplete.sh - Usage Information"
+    echo_green "Clam.sh - Usage Information"
     echo
     echo -n "Log file: "; echo -e "\e[90m$log_file\e[0m"
     if [ ! -f "$log_file" ]; then
@@ -1559,8 +1559,8 @@ usage_command() {
     echo -e "\tAvg Cost:\t\$$(printf "%.4f" "$avg_api_cost")"
     echo -e "\tTotal Cost:\t\e[31m\$$(printf "%.4f" "$api_cost")\e[0m"
     echo
-    echo -n "Cache Size: $cache_size of ${ACSH_CACHE_SIZE:-10} in "; echo -e "\e[90m$cache_dir\e[0m"
-    echo "To clear log and cache, run: autocomplete clear"
+    echo -n "Cache Size: $cache_size of ${CLAM_CACHE_SIZE:-10} in "; echo -e "\e[90m$cache_dir\e[0m"
+    echo "To clear log and cache, run: clam clear"
 }
 
 ###############################################################################
@@ -1619,7 +1619,7 @@ _interactive_completion_menu() {
     # Display the interactive menu
     echo
     echo -e "\e[1;36m╔════════════════════════════════════════════════════════════════════╗\e[0m"
-    echo -e "\e[1;36m║\e[0m  \e[1;32mAutocomplete Suggestions\e[0m                                        \e[1;36m║\e[0m"
+    echo -e "\e[1;36m║\e[0m  \e[1;32mClam Suggestions\e[0m                                        \e[1;36m║\e[0m"
     echo -e "\e[1;36m╠════════════════════════════════════════════════════════════════════╣\e[0m"
     echo -e "\e[1;36m║\e[0m  \e[90mUse ↑/↓ to navigate, Enter to execute, Esc to cancel\e[0m          \e[1;36m║\e[0m"
     echo -e "\e[1;36m╚════════════════════════════════════════════════════════════════════╝\e[0m"
@@ -1707,7 +1707,7 @@ _interactive_completion_menu() {
 
                 # Detect harm using LLM (if safeguards are enabled)
                 # Read directly from config file for immediate effect
-                local config_file="$HOME/.autocomplete/config"
+                local config_file="$HOME/.clam/config"
                 local safeguards_enabled="true"  # default
                 if [ -f "$config_file" ]; then
                     safeguards_enabled=$(grep "^harm_detection_enabled:" "$config_file" | awk '{print $2}' | tr -d ' ')
@@ -1795,22 +1795,22 @@ model_command() {
     clear
     local selected_model options=()
     if [[ $# -ne 3 ]]; then
-        mapfile -t sorted_keys < <(for key in "${!_autocomplete_modellist[@]}"; do echo "$key"; done | sort)
+        mapfile -t sorted_keys < <(for key in "${!_clam_modellist[@]}"; do echo "$key"; done | sort)
         for key in "${sorted_keys[@]}"; do
             options+=("$key")
         done
-        echo -e "\e[1;32mAutocomplete.sh - Model Configuration\e[0m"
+        echo -e "\e[1;32mClam.sh - Model Configuration\e[0m"
         menu_selector "${options[@]}"
         selected_option=$?
         if [[ $selected_option -eq 1 ]]; then
             return
         fi
         selected_model="${options[selected_option]}"
-        selected_value="${_autocomplete_modellist[$selected_model]}"
+        selected_value="${_clam_modellist[$selected_model]}"
     else
         provider="$2"
         model_name="$3"
-        selected_value="${_autocomplete_modellist["$provider:	$model_name"]}"
+        selected_value="${_clam_modellist["$provider:	$model_name"]}"
         if [[ -z "$selected_value" ]]; then
             echo "ERROR: Invalid provider or model name."
             return 1
@@ -1825,53 +1825,53 @@ model_command() {
     set_config "api_completion_cost" "$completion_cost"
 
     # Reload config to get updated values for display
-    acsh_load_config
+    _clam_load_config
 
-    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
-        echo -e "\e[34mSet ${ACSH_PROVIDER^^}_API_KEY\e[0m"
-        echo "Stored in ~/.autocomplete/config"
-        if [[ ${ACSH_PROVIDER^^} == "OPENAI" ]]; then
+    if [[ -z "$CLAM_ACTIVE_API_KEY" && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
+        echo -e "\e[34mSet ${CLAM_PROVIDER^^}_API_KEY\e[0m"
+        echo "Stored in ~/.clam/config"
+        if [[ ${CLAM_PROVIDER^^} == "OPENAI" ]]; then
             echo "Create a new one: https://platform.openai.com/settings/profile?tab=api-keys"
-        elif [[ ${ACSH_PROVIDER^^} == "ANTHROPIC" ]]; then
+        elif [[ ${CLAM_PROVIDER^^} == "ANTHROPIC" ]]; then
             echo "Create a new one: https://console.anthropic.com/settings/keys"
-        elif [[ ${ACSH_PROVIDER^^} == "GROQ" ]]; then
+        elif [[ ${CLAM_PROVIDER^^} == "GROQ" ]]; then
             echo "Create a new one: https://console.groq.com/keys"
         fi
-        echo -n "Enter your ${ACSH_PROVIDER^^} API Key: "
+        echo -n "Enter your ${CLAM_PROVIDER^^} API Key: "
         read -sr user_api_key_input < /dev/tty
         clear
-        echo -e "\e[1;32mAutocomplete.sh - Model Configuration\e[0m"
+        echo -e "\e[1;32mClam.sh - Model Configuration\e[0m"
         if [[ -n "$user_api_key_input" ]]; then
-            export ACSH_ACTIVE_API_KEY="$user_api_key_input"
-            set_config "${ACSH_PROVIDER,,}_api_key" "$user_api_key_input"
+            export CLAM_ACTIVE_API_KEY="$user_api_key_input"
+            set_config "${CLAM_PROVIDER,,}_api_key" "$user_api_key_input"
         fi
     fi
-    model="${ACSH_MODEL:-ERROR}"
-    temperature=$(echo "${ACSH_TEMPERATURE:-0.0}" | awk '{printf "%.3f", $1}')
-    echo -e "Provider:\t\e[90m$ACSH_PROVIDER\e[0m"
+    model="${CLAM_MODEL:-ERROR}"
+    temperature=$(echo "${CLAM_TEMPERATURE:-0.0}" | awk '{printf "%.3f", $1}')
+    echo -e "Provider:\t\e[90m$CLAM_PROVIDER\e[0m"
     echo -e "Model:\t\t\e[90m$model\e[0m"
     echo -e "Temperature:\t\e[90m$temperature\e[0m"
     echo
-    echo -e "Cost/token:\t\e[90mprompt: \$$ACSH_API_PROMPT_COST, completion: \$$ACSH_API_COMPLETION_COST\e[0m"
-    echo -e "Endpoint:\t\e[90m$ACSH_ENDPOINT\e[0m"
+    echo -e "Cost/token:\t\e[90mprompt: \$$CLAM_API_PROMPT_COST, completion: \$$CLAM_API_COMPLETION_COST\e[0m"
+    echo -e "Endpoint:\t\e[90m$CLAM_ENDPOINT\e[0m"
     echo -n "API Key:"
-    if [[ -z $ACSH_ACTIVE_API_KEY ]]; then
-        if [[ ${ACSH_PROVIDER^^} == "OLLAMA" ]]; then
+    if [[ -z $CLAM_ACTIVE_API_KEY ]]; then
+        if [[ ${CLAM_PROVIDER^^} == "OLLAMA" ]]; then
             echo -e "\t\e[90mNot Used\e[0m"
         else
             echo -e "\t\e[31mUNSET\e[0m"
         fi
     else
-        rest=${ACSH_ACTIVE_API_KEY:4}
-        config_value="${ACSH_ACTIVE_API_KEY:0:4}...${rest: -4}"
+        rest=${CLAM_ACTIVE_API_KEY:4}
+        config_value="${CLAM_ACTIVE_API_KEY:0:4}...${rest: -4}"
         echo -e "\t\e[32m$config_value\e[0m"
     fi
-    if [[ -z $ACSH_ACTIVE_API_KEY && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
+    if [[ -z $CLAM_ACTIVE_API_KEY && ${CLAM_PROVIDER^^} != "OLLAMA" ]]; then
         echo "To set the API Key, run:"
         echo -e "\t\e[31mautocomplete config set api_key <your-api-key>\e[0m"
-        echo -e "\t\e[31mexport ${ACSH_PROVIDER^^}_API_KEY=<your-api-key>\e[0m"
+        echo -e "\t\e[31mexport ${CLAM_PROVIDER^^}_API_KEY=<your-api-key>\e[0m"
     fi
-    if [[ ${ACSH_PROVIDER^^} == "OLLAMA" ]]; then
+    if [[ ${CLAM_PROVIDER^^} == "OLLAMA" ]]; then
         echo "To set a custom endpoint:"
         echo -e "\t\e[34mautocomplete config set endpoint <your-url>\e[0m"
         echo "Other models can be set with:"
@@ -1887,7 +1887,7 @@ model_command() {
 ###############################################################################
 
 fep_command() {
-    acsh_load_config
+    _clam_load_config
     local user_context="${*:2}"
     local response recommended_cmd explanation content
 
@@ -1897,14 +1897,14 @@ fep_command() {
     response=$(fep_completion "$user_context")
 
     if [[ -z "$response" ]]; then
-        echo_error "Failed to get response from API. Check config and API key (autocomplete config)."
+        echo_error "Failed to get response from API. Check config and API key (clam config)."
         return 1
     fi
 
     # Extract message content by provider
-    if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
+    if [[ "${CLAM_PROVIDER^^}" == "ANTHROPIC" ]]; then
         content=$(echo "$response" | jq -r '.content[0].text // empty')
-    elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
+    elif [[ "${CLAM_PROVIDER^^}" == "OLLAMA" ]]; then
         content=$(echo "$response" | jq -r '.message.content // empty')
     else
         content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
@@ -1945,9 +1945,9 @@ fep_command() {
 
 acsh_run() {
     local cmd="$*"
-    export ACSH_LAST_COMMAND="$cmd"
-    eval "$cmd" 2>&1 | tee "$ACSH_LAST_OUTPUT_FILE"
-    export ACSH_LAST_EXIT_CODE="${PIPESTATUS[0]}"
+    export CLAM_LAST_COMMAND="$cmd"
+    eval "$cmd" 2>&1 | tee "$CLAM_LAST_OUTPUT_FILE"
+    export CLAM_LAST_EXIT_CODE="${PIPESTATUS[0]}"
 }
 
 ###############################################################################
@@ -1996,9 +1996,9 @@ case "$1" in
         ;;
     *)
         if [[ -n "$1" ]]; then
-            echo_error "Unknown command $1 - run 'autocomplete --help' for usage or visit https://autocomplete.sh"
+            echo_error "Unknown command $1 - run 'clam --help' for usage or visit https://clam.sh"
         else
-            echo_green "Autocomplete.sh - LLM Powered Bash Completion - Version $ACSH_VERSION - https://autocomplete.sh"
+            echo_green "Clam.sh - LLM Powered Bash Completion - Version $CLAM_VERSION - https://clam.sh"
         fi
         ;;
 esac

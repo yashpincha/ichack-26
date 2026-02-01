@@ -11,7 +11,7 @@ echo
 # Test 1: Verify detect_command_harm works
 echo "Test 1: Testing detect_command_harm function"
 echo "---"
-source "$SCRIPT_DIR/../autocomplete.sh" > /dev/null 2>&1
+source "$SCRIPT_DIR/../clam.sh" > /dev/null 2>&1
 result=$(detect_command_harm "rm -rf /")
 is_harmful=$(echo "$result" | jq -r '.is_harmful' 2>/dev/null)
 
@@ -66,7 +66,7 @@ echo
 echo "Test 4: Testing rm command doesn't hang"
 echo "---"
 touch /tmp/test_rm_infinity.txt
-autocomplete enable > /dev/null 2>&1
+clam enable > /dev/null 2>&1
 
 # Run rm with timeout - if it hangs, this will fail
 if timeout 3 bash -c 'echo y | rm /tmp/test_rm_infinity.txt 2>/dev/null'; then
