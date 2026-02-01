@@ -34,6 +34,7 @@ Finally, you will need to select your LLM model (which can be local). For instan
 ```bash
 source clam config set openai_api_key "your-key"
 ```
+By default, the model is local.
 
 ## Features
 
@@ -41,7 +42,6 @@ source clam config set openai_api_key "your-key"
 - **Flexible**: Supports various LLM models, from fast and cheap to powerful (and even local!)
 - **Secure**: Enables local LLMs and sanitizes prompts for sensitive information
 - **Efficient**: Caches recent queries for speed and convenience
-- **Cost-Effective**: Monitors API call sizes and costs
 
 ## Supported Models
 
@@ -80,9 +80,9 @@ $ ls # with file sizes in human-readable format
 Generating suggestions...
 
 ╔════════════════════════════════════════════════════════════════════╗
-║  Clam Suggestions                                        ║
+║  Clam Suggestions                                                  ║
 ╠════════════════════════════════════════════════════════════════════╣
-║  Use ↑/↓ to navigate, Enter to execute, Esc to cancel          ║
+║  Use ↑/↓ to navigate, Enter to execute, Esc to cancel              ║
 ╚════════════════════════════════════════════════════════════════════╝
 
   ▶ ls -lh
@@ -102,7 +102,7 @@ Generating suggestions...
 ```
 
 
-### 🛡️ **Two-Layer Safety System**
+### 🛡️ **Clammy Protects You**
 Never accidentally run a dangerous command again.
 
 - **Pattern Safeguards** (Fast, Local): Catches known dangerous patterns like `rm -rf /`
@@ -194,8 +194,9 @@ Developers:
 - Syed Sameer Faisal
 - Yash Pincha
 
-This project was influenced by [autocomplete-sh](https://github.com/closedloop-technologies/autocomplete-sh).
+This project was influenced by [autocomplete-sh](https://github.com/closedloop-technologies/autocomplete-sh) and developed at ICHack '26.
 
 ## License
 
 See the [MIT-LICENSE](./LICENSE) file for details.
+
