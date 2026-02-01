@@ -1,7 +1,23 @@
-IC Hack 2026: autocomplete.sh
-========================================================
+# ⚡ CLAM (Command Line Assistance Module)
 
-## CLAM (Command Line Assistance Module)
+### Your Intelligent Command-Line Companion
+
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen?style=flat-square)](https://github.com/yashpincha/ichack-26)
+[![Version](https://img.shields.io/badge/version-0.1.0-blue?style=flat-square)](https://github.com/yashpincha/ichack-26/releases)
+[![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/yashpincha/ichack-26)
+[![Made with Tauri](https://img.shields.io/badge/made%20with-Tauri-orange?style=flat-square)](https://tauri.app)
+[![ICHack '26](https://img.shields.io/badge/ICHack-'26-purple?style=flat-square)](https://ichack.org)
+
+**Type less. Do more. Stay safe.**
+
+[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
+
+</div>
+
+---
+
+## 🎯 What is CLAM?
 
 The command line is one of the most powerful tools in software engineering, yet it remains one of the least accessible. Even experienced developers forget command syntax, mistype flags, or constantly switch between the terminal and external resources just to debug errors. For beginners, the experience can feel intimidating and error-prone, where small mistakes can lead to destructive outcomes.
 
