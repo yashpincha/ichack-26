@@ -6,6 +6,10 @@ to make irreversible and destructive mistakes.
 
 CLAM uses LLMs (local or cloud) to help you confidently use UNIX commands. Whether you are new to UNIX or deeply experienced, CLAM can help you save time and increase your productivity. In particular, you no longer have to navigate between external LLMs and your terminal!
 
+## Demo
+
+![CLAM Demo](demo.webm)
+
 ## Quick Start
 
 Installing our tool is incredibly simple:
@@ -182,7 +186,7 @@ Developers:
 - Syed Sameer Faisal
 - Yash Pincha
 
-This project was influenced by [autocomplete-sh](https://github.com/closedloop-technologies/autocomplete-sh).
+This project was influenced by [`clam.sh`](https://github.com/closedloop-technologies/clam-sh/tree/main).
 
 ## License
 
