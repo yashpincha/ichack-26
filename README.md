@@ -15,6 +15,14 @@ cd ichack-26
 ./install-sh
 ```
 
+*Note*. Make sure that the directory `./.local/bin` exists on your device before you attempt an installation. You will also need to 
+install the `jq` package.
+
+Finally, you will need to select your LLM model (which can be local). For instance, you can set an OpenAI key as follows:
+```bash
+source clam config set openai_api_key "your-key"
+```
+
 ## Features
 
 - **Context-Aware**: Considers terminal state, recent commands, and `--help` information
