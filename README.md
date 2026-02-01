@@ -2,7 +2,7 @@
 
 ## The Story
 
-Do you remember your first "git push --force", "sudo rm -rf", "chown -R root:root /"? It was a difficult time for everyone. Until our humble superhero, Clammy, opened ✨_the shell_✨ to everyone. 
+Do you remember your first `git push --force`, `sudo rm -rf`, `chown -R root:root /`? It was a difficult time for everyone. Until our humble superhero, Clammy, opened ✨*the shell*✨ to everyone. 
 
 ## Clammy's Job
 
