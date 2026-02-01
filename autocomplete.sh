@@ -66,34 +66,37 @@ _autocomplete_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "pr
 _autocomplete_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
 
 ###############################################################################
-#                    Load .env from script directory (for API key)            #
+#     .env loading disabled - using ~/.autocomplete/config instead           #
 ###############################################################################
-_acsh_load_dotenv() {
-    local script_dir script_src
-    script_src="${BASH_SOURCE[0]:-$0}"
-    if [[ "$script_src" != /* ]]; then
-        script_src="$(command -v "$script_src" 2>/dev/null || echo "$script_src")"
-    fi
-    if [[ -n "$script_src" ]]; then
-        script_dir="$(cd "$(dirname "$(readlink -f "$script_src" 2>/dev/null || echo "$script_src")")" && pwd)" 2>/dev/null || true
-    fi
-    if [[ -z "$script_dir" ]]; then
-        script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-    fi
-    if [[ -n "$script_dir" && -f "$script_dir/.env" ]]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$script_dir/.env"
-        set +a
-    fi
-    if [[ -f "$HOME/.autocomplete/.env" ]]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$HOME/.autocomplete/.env"
-        set +a
-    fi
-}
-_acsh_load_dotenv
+# The following function was added by the FEP branch but is disabled to ensure
+# API keys are loaded only from ~/.autocomplete/config, not from .env files.
+#
+# _acsh_load_dotenv() {
+#     local script_dir script_src
+#     script_src="${BASH_SOURCE[0]:-$0}"
+#     if [[ "$script_src" != /* ]]; then
+#         script_src="$(command -v "$script_src" 2>/dev/null || echo "$script_src")"
+#     fi
+#     if [[ -n "$script_src" ]]; then
+#         script_dir="$(cd "$(dirname "$(readlink -f "$script_src" 2>/dev/null || echo "$script_src")")" && pwd)" 2>/dev/null || true
+#     fi
+#     if [[ -z "$script_dir" ]]; then
+#         script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+#     fi
+#     if [[ -n "$script_dir" && -f "$script_dir/.env" ]]; then
+#         set -a
+#         # shellcheck source=/dev/null
+#         source "$script_dir/.env"
+#         set +a
+#     fi
+#     if [[ -f "$HOME/.autocomplete/.env" ]]; then
+#         set -a
+#         # shellcheck source=/dev/null
+#         source "$HOME/.autocomplete/.env"
+#         set +a
+#     fi
+# }
+# _acsh_load_dotenv
 
 ###############################################################################
 #                    FEP (Fix Error Please) - Context Capture                  #
@@ -468,7 +471,7 @@ openai_completion() {
         echo_error "ACSH_ACTIVE_API_KEY not set. Please set it with: export ${ACSH_PROVIDER^^}_API_KEY=<your-api-key>"
         return
     fi
-    api_key="${ACSH_ACTIVE_API_KEY:-$OPENAI_API_KEY}"
+    api_key="$ACSH_ACTIVE_API_KEY"
     payload=$(_build_payload "$user_input")
     
     max_attempts=2
@@ -579,7 +582,7 @@ fep_completion() {
     prompt="$(_build_fep_prompt "$user_context")"
     endpoint="${ACSH_ENDPOINT:-https://api.openai.com/v1/chat/completions}"
     timeout="${ACSH_TIMEOUT:-60}"
-    api_key="${ACSH_ACTIVE_API_KEY:-$OPENAI_API_KEY}"
+    api_key="$ACSH_ACTIVE_API_KEY"
 
     if [[ -z "$api_key" && "${ACSH_PROVIDER^^}" != "OLLAMA" ]]; then
         echo_error "ACSH_ACTIVE_API_KEY not set. Run: autocomplete config (or set OPENAI_API_KEY)"
@@ -592,15 +595,15 @@ fep_completion() {
 
     while [[ $attempt -le $max_attempts ]]; do
         if [[ "${ACSH_PROVIDER^^}" == "ANTHROPIC" ]]; then
-            response=$(curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "content-type: application/json" \
                 -H "anthropic-version: 2023-06-01" \
                 -H "x-api-key: $api_key" \
                 --data "$payload")
         elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
-            response=$(curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
+            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
         else
-            response=$(curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
+            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "Content-Type: application/json" \
                 -H "Authorization: Bearer $api_key" \
                 -d "$payload")
@@ -741,12 +744,9 @@ detect_command_harm() {
 
     endpoint=${ACSH_ENDPOINT:-"https://api.openai.com/v1/chat/completions"}
     timeout=${ACSH_HARM_TIMEOUT:-3}
-    api_key="${ACSH_ACTIVE_API_KEY:-$OPENAI_API_KEY}"
+    api_key="$ACSH_ACTIVE_API_KEY"
 
     payload=$(_build_harm_detection_payload "$command")
-
-    # Debug: notify that we're making an API request
-    echo -e "\e[90m[DEBUG] Submitting API request to check command harm: $command\e[0m" >&2
 
     # Call API with short timeout for harm detection
     # Use 'command' to bypass wrapper functions and prevent infinite recursion
@@ -1430,6 +1430,7 @@ _enable_safeguards() {
     export -f _check_command_with_safeguard
     for cmd in "${risky_commands[@]}"; do
         [[ $(type -t "$cmd") == "function" ]] && export -f "$cmd"
+        [[ $(type -t "_original_$cmd") == "function" ]] && export -f "_original_$cmd"
     done
 }
 
