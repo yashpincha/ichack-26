@@ -13,11 +13,8 @@
 
 **Type less. Do more. Stay safe.**
 
-[Features](#-features) • [Installation](#-installation) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
-
 </div>
 
----
 
 ## 🎯 What is CLAM?
 
