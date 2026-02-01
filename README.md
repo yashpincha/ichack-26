@@ -16,7 +16,7 @@ A local command-line assistant, that only shows up when something breaks and dis
 
 ## Demo
 
-![CLAM Demo](https://github.com/yashpincha/ichack-26/blob/main/demo.mp4)
+![CLAM Demo](https://github.com/yashpincha/ichack-26/blob/main/demo.gif)
 
 ## Quick Start
 
