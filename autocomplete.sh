@@ -1082,7 +1082,6 @@ show_config() {
 set_config() {
     local key="$1" value="$2" config_file="$HOME/.autocomplete/config"
     key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    key=$(echo "$key" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z0-9]/_/g')
     if [ -z "$key" ]; then
         echo_error "SyntaxError: expected 'autocomplete config set <key> <value>'"
         return
@@ -1346,9 +1345,15 @@ _check_command_with_safeguard() {
     # Set flag to prevent re-entry
     export _ACSH_IN_SAFEGUARD=1
 
+    # Check if detect_command_harm function is available
+    if ! type -t detect_command_harm &>/dev/null; then
+        unset _ACSH_IN_SAFEGUARD
+        return 0
+    fi
+
     # Check for harm using LLM
     local harm_data is_harmful explanation
-    harm_data=$(detect_command_harm "$full_cmd")
+    harm_data=$(detect_command_harm "$full_cmd" 2>/dev/null)
     is_harmful=$(echo "$harm_data" | jq -r '.is_harmful')
     explanation=$(echo "$harm_data" | jq -r '.explanation')
 
@@ -1393,8 +1398,12 @@ _enable_safeguards() {
         fi
     done
 
-    # Export the check function and wrappers
+    # Export the check function, harm detection function, dependencies, and wrappers
     export -f _check_command_with_safeguard
+    export -f detect_command_harm
+    export -f acsh_load_config
+    export -f _build_harm_detection_payload
+    export -f echo_error
     for cmd in "${risky_commands[@]}"; do
         [[ $(type -t "$cmd") == "function" ]] && export -f "$cmd"
         [[ $(type -t "_original_$cmd") == "function" ]] && export -f "_original_$cmd"
@@ -1412,7 +1421,9 @@ _disable_safeguards() {
         fi
     done
 
-    # Unset the check function
+    # Unset the check and harm detection functions
+    # Note: We don't unset acsh_load_config, echo_error, or _build_harm_detection_payload
+    # as they're used elsewhere in the script
     [[ $(type -t _check_command_with_safeguard) == "function" ]] && unset -f _check_command_with_safeguard
 }
 
@@ -1877,6 +1888,10 @@ model_command() {
     completion_cost=$(echo "$selected_value" | jq -r '.completion_cost' | awk '{printf "%.8f", $1}')
     set_config "api_prompt_cost" "$prompt_cost"
     set_config "api_completion_cost" "$completion_cost"
+
+    # Reload config to get updated values for display
+    acsh_load_config
+
     if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
         echo -e "\e[34mSet ${ACSH_PROVIDER^^}_API_KEY\e[0m"
         echo "Stored in ~/.autocomplete/config"

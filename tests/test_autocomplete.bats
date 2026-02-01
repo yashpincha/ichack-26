@@ -1,22 +1,21 @@
 #!/usr/bin/env bats
 
 setup() {
-    # Install autocomplete.sh and run testing against the reversion branch
-    wget -qO- https://raw.githubusercontent.com/yashpincha/ichack-26/reversion/install.sh | bash
+    # Install autocomplete.sh from parent directory
+    bash "$BATS_TEST_DIRNAME/../install.sh"
 
     # Source bashrc to make sure autocomplete is available in the current session
     source ~/.bashrc
 
-    # Assert OPENAI_API_KEY is set
-    if [ -z "$OPENAI_API_KEY" ]; then
-        echo "ERROR: OPENAI_API_KEY is not set. Please set the environment variable before running the tests."
+    # Assert ACSH_OPENAI_API_KEY is set
+    if [ -z "$ACSH_OPENAI_API_KEY" ]; then
+        echo "ERROR: ACSH_OPENAI_API_KEY is not set. Please set the environment variable before running the tests."
         exit 1
     fi
 }
 
 teardown() {
-    # Remove autocomplete.sh installation
-    autocomplete remove -y
+    autocomplete model openai gpt-4o
 }
 
 @test "which autocomplete returns something" {
@@ -32,10 +31,13 @@ teardown() {
 }
 
 @test "autocomplete model gpt4o-mini and then config should have the string gpt4o-mini" {
+    # Set the model and capture status
     run autocomplete model openai gpt-4o-mini
     [ "$status" -eq 0 ]
+    [[ "$output" =~ gpt-4o-mini ]]
 
-    run autocomplete config
+    # Check that config file was updated
+    run grep "^model:" ~/.autocomplete/config
     [ "$status" -eq 0 ]
     [[ "$output" =~ gpt-4o-mini ]]
 }

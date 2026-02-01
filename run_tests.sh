@@ -31,3 +31,8 @@ if ! command -v bats &> /dev/null; then
 fi
 
 bats tests/
+
+tests/test_final_verification.sh
+tests/test_harm_basic.sh
+tests/test_harm_detection.sh
+tests/test_rm.sh
