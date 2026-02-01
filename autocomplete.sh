@@ -66,39 +66,6 @@ _autocomplete_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "pr
 _autocomplete_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
 
 ###############################################################################
-#     .env loading disabled - using ~/.autocomplete/config instead           #
-###############################################################################
-# The following function was added by the FEP branch but is disabled to ensure
-# API keys are loaded only from ~/.autocomplete/config, not from .env files.
-#
-# _acsh_load_dotenv() {
-#     local script_dir script_src
-#     script_src="${BASH_SOURCE[0]:-$0}"
-#     if [[ "$script_src" != /* ]]; then
-#         script_src="$(command -v "$script_src" 2>/dev/null || echo "$script_src")"
-#     fi
-#     if [[ -n "$script_src" ]]; then
-#         script_dir="$(cd "$(dirname "$(readlink -f "$script_src" 2>/dev/null || echo "$script_src")")" && pwd)" 2>/dev/null || true
-#     fi
-#     if [[ -z "$script_dir" ]]; then
-#         script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-#     fi
-#     if [[ -n "$script_dir" && -f "$script_dir/.env" ]]; then
-#         set -a
-#         # shellcheck source=/dev/null
-#         source "$script_dir/.env"
-#         set +a
-#     fi
-#     if [[ -f "$HOME/.autocomplete/.env" ]]; then
-#         set -a
-#         # shellcheck source=/dev/null
-#         source "$HOME/.autocomplete/.env"
-#         set +a
-#     fi
-# }
-# _acsh_load_dotenv
-
-###############################################################################
 #                    FEP (Fix Error Please) - Context Capture                  #
 ###############################################################################
 # Only set defaults if not already set (so "ACSH_LAST_COMMAND=cmd autocomplete fep" works)
