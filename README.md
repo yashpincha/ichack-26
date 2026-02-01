@@ -1,10 +1,22 @@
-# 🎯 CLAM: Command Line Assistance Module
+# clam: command line assistance module (FixErrorPls)
 
-Command line beginners often forget command syntax and flags, and even experienced developers often find themselves needing to refer to 
-external sources (e.g. LLMs and documentation). Especially when unfamiliar with the command line (or a new tool), it can be very easy 
-to make irreversible and destructive mistakes.
+## The Story
 
-CLAM uses LLMs (local or cloud) to help you confidently use UNIX commands. Whether you are new to UNIX or deeply experienced, CLAM can help you save time and increase your productivity. In particular, you no longer have to navigate between external LLMs and your terminal!
+Do you remember your first `git push --force`, `sudo rm -rf`, `chown -R root:root /`? It was a difficult time for everyone. Until our humble superhero, Clammy, opened ✨*the shell*✨ to everyone. 
+
+## Clammy's Job
+
+ Most tools try to be helpful all the time, but most users don't need the noice, setup and cognitive load. We asked Clammy to solve a simpler question. What is the smallest help that actually works?
+
+We would like to introduce to you:
+
+clam
+
+A local command-line assistant, that only shows up when something breaks and disappears once it's fixed. If you don't need it, you forget it exists - and that's by design. 
+
+## Demo
+
+![CLAM Demo](https://github.com/yashpincha/ichack-26/blob/main/demo.gif)
 
 ## Quick Start
 
@@ -22,6 +34,7 @@ Finally, you will need to select your LLM model (which can be local). For instan
 ```bash
 source clam config set openai_api_key "your-key"
 ```
+By default, the model is local.
 
 ## Features
 
@@ -29,7 +42,6 @@ source clam config set openai_api_key "your-key"
 - **Flexible**: Supports various LLM models, from fast and cheap to powerful (and even local!)
 - **Secure**: Enables local LLMs and sanitizes prompts for sensitive information
 - **Efficient**: Caches recent queries for speed and convenience
-- **Cost-Effective**: Monitors API call sizes and costs
 
 ## Supported Models
 
@@ -68,9 +80,9 @@ $ ls # with file sizes in human-readable format
 Generating suggestions...
 
 ╔════════════════════════════════════════════════════════════════════╗
-║  Clam Suggestions                                        ║
+║  Clam Suggestions                                                  ║
 ╠════════════════════════════════════════════════════════════════════╣
-║  Use ↑/↓ to navigate, Enter to execute, Esc to cancel          ║
+║  Use ↑/↓ to navigate, Enter to execute, Esc to cancel              ║
 ╚════════════════════════════════════════════════════════════════════╝
 
   ▶ ls -lh
@@ -90,7 +102,7 @@ Generating suggestions...
 ```
 
 
-### 🛡️ **Two-Layer Safety System**
+### 🛡️ **Clammy Protects You**
 Never accidentally run a dangerous command again.
 
 - **Pattern Safeguards** (Fast, Local): Catches known dangerous patterns like `rm -rf /`
@@ -172,6 +184,12 @@ clam usage
 
 To test the tool, just execute `./run_tests.sh`. It will automatically install `bats` if you do not already have it.
 
+Alternatively, you may choose to use Docker to directly pull and run an existing image of the tool:
+```
+docker pull treefwog/autocomplete-sh:latest
+docker run -it treefwog/autocomplete-sh:latest
+```
+
 ## Developers
 
 Developers:
@@ -182,8 +200,9 @@ Developers:
 - Syed Sameer Faisal
 - Yash Pincha
 
-This project was influenced by [autocomplete-sh](https://github.com/closedloop-technologies/autocomplete-sh).
+This project was influenced by [autocomplete-sh](https://github.com/closedloop-technologies/autocomplete-sh) and developed at ICHack '26.
 
 ## License
 
 See the [MIT-LICENSE](./LICENSE) file for details.
+
