@@ -64,8 +64,6 @@ _autocomplete_modellist['groq:		llama-3.2-3b-preview']='{ "completion_cost":0.00
 # Ollama models
 _autocomplete_modellist['ollama:	codellama']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "codellama", "provider": "ollama" }'
 _autocomplete_modellist['ollama:	qwen2.5-coder:7b-instruct']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://localhost:11434/api/chat", "model": "qwen2.5-coder:7b-instruct", "provider": "ollama" }'
-# BitNet models (local 1-bit LLM)
-_autocomplete_modellist['bitnet:	BitNet-b1.58-2B-4T']='{ "completion_cost":0.0000000, "prompt_cost":0.0000000, "endpoint": "http://127.0.0.1:8080/v1/chat/completions", "model": "BitNet-b1.58-2B-4T", "provider": "bitnet" }'
 
 ###############################################################################
 #     .env loading disabled - using ~/.autocomplete/config instead           #
@@ -379,11 +377,6 @@ $prompt"
                 options: {temperature: (.temperature | tonumber)}
             }')
             ;;
-        "BITNET")
-            payload=$(echo "$base_payload" | jq '. + {
-                max_tokens: 1024
-            }')
-            ;;
         *)
             payload=$(echo "$base_payload" | jq '. + {
                 response_format: {type: "json_object"},
@@ -474,7 +467,7 @@ openai_completion() {
     default_user_input="Write two to six most likely commands given the provided information"
     user_input=${*:-$default_user_input}
 
-    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" && ${ACSH_PROVIDER^^} != "BITNET" ]]; then
+    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
         echo_error "ACSH_ACTIVE_API_KEY not set. Please set it with: export ${ACSH_PROVIDER^^}_API_KEY=<your-api-key>"
         return
     fi
@@ -493,10 +486,6 @@ openai_completion() {
                 --data "$payload")
         elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
-        elif [[ "${ACSH_PROVIDER^^}" == "BITNET" ]]; then
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-                -H "Content-Type: application/json" \
-                -d "$payload")
         else
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "Content-Type: application/json" \
@@ -533,11 +522,6 @@ openai_completion() {
     elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
         content=$(echo "$response_body" | jq -r '.message.content')
         content=$(echo "$content" | jq -r '.suggestions // .completions')
-    elif [[ "${ACSH_PROVIDER^^}" == "BITNET" ]]; then
-        content=$(echo "$response_body" | jq -r '.choices[0].message.content')
-        # Strip markdown code blocks if present
-        content=$(echo "$content" | sed 's/^```json//g' | sed 's/^```//g' | sed 's/```$//g' | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-        content=$(echo "$content" | jq -r '.suggestions // .completions // .')
     else
         content=$(echo "$response_body" | jq -r '.choices[0].message.tool_calls[0].function.arguments')
         content=$(echo "$content" | jq -r '.suggestions // .commands')
@@ -585,9 +569,6 @@ _build_fep_payload() {
         "OLLAMA")
             echo "$base_payload" | jq '. + {format: "json", stream: false}'
             ;;
-        "BITNET")
-            echo "$base_payload" | jq '. + {max_tokens: 1024}'
-            ;;
         *)
             echo "$base_payload" | jq '. + {response_format: {type: "json_object"}}'
             ;;
@@ -603,7 +584,7 @@ fep_completion() {
     timeout="${ACSH_TIMEOUT:-60}"
     api_key="$ACSH_ACTIVE_API_KEY"
 
-    if [[ -z "$api_key" && "${ACSH_PROVIDER^^}" != "OLLAMA" && "${ACSH_PROVIDER^^}" != "BITNET" ]]; then
+    if [[ -z "$api_key" && "${ACSH_PROVIDER^^}" != "OLLAMA" ]]; then
         echo_error "ACSH_ACTIVE_API_KEY not set. Run: autocomplete config (or set OPENAI_API_KEY)"
         return 1
     fi
@@ -621,10 +602,6 @@ fep_completion() {
                 --data "$payload")
         elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
-        elif [[ "${ACSH_PROVIDER^^}" == "BITNET" ]]; then
-            response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-                -H "Content-Type: application/json" \
-                -d "$payload")
         else
             response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
                 -H "Content-Type: application/json" \
@@ -719,11 +696,6 @@ Classify this command and respond with ONLY a JSON object in this exact format:
                 options: {temperature: 0.0}
             }')
             ;;
-        "BITNET")
-            payload=$(echo "$base_payload" | jq '. + {
-                max_tokens: 512
-            }')
-            ;;
         *)
             # OpenAI default - use function calling
             payload=$(echo "$base_payload" | jq '. + {
@@ -786,10 +758,6 @@ detect_command_harm() {
             --data "$payload")
     elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
         response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" --data "$payload")
-    elif [[ "${ACSH_PROVIDER^^}" == "BITNET" ]]; then
-        response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
-            -H "Content-Type: application/json" \
-            -d "$payload")
     else
         response=$(command curl -s -m "$timeout" -w "\n%{http_code}" "$endpoint" \
             -H "Content-Type: application/json" \
@@ -815,10 +783,6 @@ detect_command_harm() {
         harm_data=$(echo "$response_body" | jq -r '.choices[0].message.content')
     elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
         harm_data=$(echo "$response_body" | jq -r '.message.content')
-    elif [[ "${ACSH_PROVIDER^^}" == "BITNET" ]]; then
-        harm_data=$(echo "$response_body" | jq -r '.choices[0].message.content')
-        # Strip markdown code blocks if present
-        harm_data=$(echo "$harm_data" | sed 's/^```json//g' | sed 's/^```//g' | sed 's/```$//g' | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     else
         # OpenAI function calling - arguments is a JSON string that needs parsing
         local arguments_string
@@ -886,7 +850,7 @@ _autocompletesh() {
     if [[ ${#COMPREPLY[@]} -eq 0 && $COMP_TYPE -eq 63 ]]; then
         local completions user_input user_input_hash
         acsh_load_config
-        if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" && ${ACSH_PROVIDER^^} != "BITNET" ]]; then
+        if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
             local provider_key="${ACSH_PROVIDER:-openai}_API_KEY"
             provider_key=$(echo "$provider_key" | tr '[:lower:]' '[:upper:]')
             echo_error "${provider_key} is not set. Please set it using: export ${provider_key}=<your-api-key> or disable autocomplete via: autocomplete disable"
@@ -977,7 +941,7 @@ _interactive_autocomplete_widget() {
     acsh_load_config
 
     # Check API key
-    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" && ${ACSH_PROVIDER^^} != "BITNET" ]]; then
+    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
         echo
         echo_error "API key not set. Configure with: autocomplete config"
         return
@@ -1268,7 +1232,6 @@ acsh_load_config() {
             "anthropic") export ACSH_ACTIVE_API_KEY="$ACSH_ANTHROPIC_API_KEY" ;;
             "groq") export ACSH_ACTIVE_API_KEY="$ACSH_GROQ_API_KEY" ;;
             "ollama") export ACSH_ACTIVE_API_KEY="$ACSH_OLLAMA_API_KEY" ;;
-            "bitnet") export ACSH_ACTIVE_API_KEY="" ;;
             *) echo_error "Unknown provider: $ACSH_PROVIDER" ;;
         esac
     else
@@ -1947,7 +1910,7 @@ model_command() {
     completion_cost=$(echo "$selected_value" | jq -r '.completion_cost' | awk '{printf "%.8f", $1}')
     set_config "api_prompt_cost" "$prompt_cost"
     set_config "api_completion_cost" "$completion_cost"
-    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" && ${ACSH_PROVIDER^^} != "BITNET" ]]; then
+    if [[ -z "$ACSH_ACTIVE_API_KEY" && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
         echo -e "\e[34mSet ${ACSH_PROVIDER^^}_API_KEY\e[0m"
         echo "Stored in ~/.autocomplete/config"
         if [[ ${ACSH_PROVIDER^^} == "OPENAI" ]]; then
@@ -1976,7 +1939,7 @@ model_command() {
     echo -e "Endpoint:\t\e[90m$ACSH_ENDPOINT\e[0m"
     echo -n "API Key:"
     if [[ -z $ACSH_ACTIVE_API_KEY ]]; then
-        if [[ ${ACSH_PROVIDER^^} == "OLLAMA" || ${ACSH_PROVIDER^^} == "BITNET" ]]; then
+        if [[ ${ACSH_PROVIDER^^} == "OLLAMA" ]]; then
             echo -e "\t\e[90mNot Used\e[0m"
         else
             echo -e "\t\e[31mUNSET\e[0m"
@@ -1986,12 +1949,12 @@ model_command() {
         config_value="${ACSH_ACTIVE_API_KEY:0:4}...${rest: -4}"
         echo -e "\t\e[32m$config_value\e[0m"
     fi
-    if [[ -z $ACSH_ACTIVE_API_KEY && ${ACSH_PROVIDER^^} != "OLLAMA" && ${ACSH_PROVIDER^^} != "BITNET" ]]; then
+    if [[ -z $ACSH_ACTIVE_API_KEY && ${ACSH_PROVIDER^^} != "OLLAMA" ]]; then
         echo "To set the API Key, run:"
         echo -e "\t\e[31mautocomplete config set api_key <your-api-key>\e[0m"
         echo -e "\t\e[31mexport ${ACSH_PROVIDER^^}_API_KEY=<your-api-key>\e[0m"
     fi
-    if [[ ${ACSH_PROVIDER^^} == "OLLAMA" || ${ACSH_PROVIDER^^} == "BITNET" ]]; then
+    if [[ ${ACSH_PROVIDER^^} == "OLLAMA" ]]; then
         echo "To set a custom endpoint:"
         echo -e "\t\e[34mautocomplete config set endpoint <your-url>\e[0m"
         echo "Other models can be set with:"
@@ -2026,10 +1989,6 @@ fep_command() {
         content=$(echo "$response" | jq -r '.content[0].text // empty')
     elif [[ "${ACSH_PROVIDER^^}" == "OLLAMA" ]]; then
         content=$(echo "$response" | jq -r '.message.content // empty')
-    elif [[ "${ACSH_PROVIDER^^}" == "BITNET" ]]; then
-        content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
-        # Strip markdown code blocks if present
-        content=$(echo "$content" | sed 's/^```json//g' | sed 's/^```//g' | sed 's/```$//g' | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     else
         content=$(echo "$response" | jq -r '.choices[0].message.content // empty')
     fi
