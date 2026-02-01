@@ -8,7 +8,7 @@ CLAM uses LLMs (local or cloud) to help you confidently use UNIX commands. Wheth
 
 ## Demo
 
-![CLAM Demo](demo.webm)
+![CLAM Demo](demo.mp4)
 
 ## Quick Start
 
